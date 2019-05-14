@@ -91,20 +91,28 @@ class Clusterer(object):
   def extract_cluster(self, outdir):
     """
     """
-    startParsing = False
     with open(f'{outdir}/mclClustered.txt', 'r') as inputStream:
+      while not inputStream.readline().startswith('begin'):
+        continue
+
+      newCluster = []
       for line in inputStream:
-
-        if startParsing:
-          if line.startswith(')'):
+        if line.startswith(')'):
             break
-          cluster = line.rstrip("$\n").split()
-          header = [self.id2header[x] for x in cluster[1:]]
-          self.allCluster.append(header)
+  
+        cluster = line.rstrip("$\n").split(' ')
+        line = line.rstrip("$\n").split()
+          
+        if cluster[0]:
+          if newCluster:
+            l_header = [self.id2header[x] for x in cluster[1:] if x]
+            self.allCluster.append(l_header)
+          newCluster = []
+        newCluster.extend(line)
 
-        if line.startswith("begin"):
-          startParsing = True
-          continue   
+      l_header = [self.id2header[x] for x in cluster[1:] if x]
+      self.allCluster.append(l_header)
+    print(self.allCluster)
     
 
   def get_centroids(self):

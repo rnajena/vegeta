@@ -158,5 +158,5 @@ if __name__ == "__main__":
     virusClusterer.create_matrix()
     logger.info("Now performing mcl to cluster the sequences.")
     virusClusterer.perform_mcl(outdir)
-    #virusClusterer.extract_cluster(outdir)
+    virusClusterer.extract_cluster(outdir)
     #virusClusterer.get_centroids()
