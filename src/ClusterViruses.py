@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import Counter
+from multiprocessing import Pool
 import itertools
 import math
 import numpy as np
@@ -18,11 +19,13 @@ class Clusterer(object):
   mclMatrix = ''
   allCluster = []
 
-  def __init__(self, sequenceFile, k):
+  def __init__(self, sequenceFile, k, cutoff):
     self.sequenceFile = sequenceFile
     self.k = k
-    nucleotides = ["A","C","G","T"]
-    self.allKmers = [''.join(kmer) for kmer in itertools.product(nucleotides, repeat=self.k)]
+    self.cutoff = cutoff
+    self.nucleotides = set(["A","C","G","T"])
+    self.allKmers = {''.join(kmer):x for x,kmer in enumerate(itertools.product(self.nucleotides, repeat=self.k))}
+
     self.d_sequences = self.read_sequences()
     
 
@@ -48,37 +51,69 @@ class Clusterer(object):
           seq += line.rstrip("\n").upper().replace('U','T')
     return fastaContent
 
+
   def determine_profile(self):
     """
     """
     for header, sequence in self.d_sequences.items():    
-      self.d_profiles[header] = {kmer : 0 for kmer in self.allKmers}
+      self.d_profiles[header] = [0]*len(self.allKmers)
       kmer = [sequence[start : start + self.k] for start in range(len(sequence) - self.k)]
-      self.d_profiles[header].update(Counter(kmer))
-      self.matrix[header] = {}
+      for k in kmer:
+        try:
+          self.d_profiles[header][self.allKmers[k]] += 1 
+        except KeyError:
+          continue
+      self.matrix[header] = []
     
 
-  def pairwise_distances(self):
+  def calc_pd(self, seqs):
+    seq1, seq2 = seqs
+    
+    profile1 = np.array(self.d_profiles[seq1])
+    profile2 = np.array(self.d_profiles[seq2])
+    distance = np.sqrt(np.sum((profile1 - profile2)**2))
+      
+    return {seq1 : (seq2, distance), seq2 : (seq1, distance)}
+
+
+  def pairwise_distances(self, proc):
     """
     """
-    for seq1, seq2 in itertools.combinations(self.d_profiles, 2):
-      profile1 = np.array([self.d_profiles[seq1][kmer] for kmer in self.allKmers])
-      profile2 = np.array([self.d_profiles[seq2][kmer] for kmer in self.allKmers])
+    p = Pool(processes=proc)
+    distances = (p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)))
+    
+    for pairwiseDist in distances:
+      for first,second in pairwiseDist.items():
+        self.matrix[first].append(second)
       
-      distance = np.sqrt(np.sum((profile1 - profile2)**2))
-      
-      self.matrix[seq1].update({seq2:distance})
-      self.matrix[seq2].update({seq1:distance})
-      
+  def normalize_function(self):
+    """
+    """
+    allDistances = []
+    
+    for row in self.matrix.values():
+      for _, distance in row:
+        allDistances.append(distance)
+    
+    def normalize(x):
+      return 1-((x - min(allDistances)) / (max(allDistances) - min(allDistances)))
+
+    return normalize
+
+
   def create_matrix(self):
     """
     """
     self.mclMatrix = f"(mclheader\nmcltype matrix\ndimensions {len(self.d_sequences)}x{len(self.d_sequences)}\n)\n"
     self.mclMatrix += f"(mcldoms\n{' '.join(self.id2header)} $\n)\n"
     self.mclMatrix += f"(mclmatrix\nbegin\n"
-    
+    normalize = self.normalize_function()
+  
     for header, distances in self.matrix.items():
-      self.mclMatrix += f"{self.header2id[header]} {' '.join([f'{self.header2id[node]}:{dist}' for node, dist in distances.items()])} $\n"
+      row = self.header2id[header]
+      consideredDistances = ' '.join([f'{self.header2id[node]}:{normalize(dist)}' for node, dist in distances if normalize(dist) > self.cutoff])
+      
+      self.mclMatrix += f"{row} {consideredDistances} $\n"
     self.mclMatrix += ")\n"
       
   def perform_mcl(self, outdir):
@@ -86,7 +121,7 @@ class Clusterer(object):
     """
     with open(f"{outdir}/mclInput.txt", 'w') as outputStream:
       outputStream.write(self.mclMatrix)
-    os.system(f"mcl {outdir}/mclInput.txt -I 5 -o {outdir}/mclClustered.txt 2>/dev/null")
+    os.system(f"mcl {outdir}/mclInput.txt -I 9 -o {outdir}/mclClustered.txt 2>/dev/null")
     
   def extract_cluster(self, outdir):
     """
@@ -96,23 +131,26 @@ class Clusterer(object):
         continue
 
       newCluster = []
+
       for line in inputStream:
         if line.startswith(')'):
-            break
+          self.allCluster.append(newCluster)
+          break
   
         cluster = line.rstrip("$\n").split(' ')
         line = line.rstrip("$\n").split()
-          
+
+        if line[-1] == '$':
+          line = line[:-1]
+
         if cluster[0]:
           if newCluster:
-            l_header = [self.id2header[x] for x in cluster[1:] if x]
-            self.allCluster.append(l_header)
-          newCluster = []
-        newCluster.extend(line)
+            self.allCluster.append(newCluster)
+          newCluster = [self.id2header[x] for x in line[1:]]
+        else:
+          newCluster.extend([self.id2header[x] for x in line])
 
-      l_header = [self.id2header[x] for x in cluster[1:] if x]
-      self.allCluster.append(l_header)
-    print(self.allCluster)
+    #print(self.allCluster)
     
 
   def get_centroids(self):

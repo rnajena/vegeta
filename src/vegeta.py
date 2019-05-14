@@ -35,16 +35,19 @@ Usage:
   vegeta.py [options] <inputSequences> [<genomeOfInterest>]
 
 Options:
-  -h, --help              Show this help message and exits.
-  -v, --verbose           Get some extra information from VeGETA during calculation. [Default: False]
-  --version               Prints the version of VeGETA and exits.
-  -o DIR, --output DIR    Specifies the output directory of VeGETA. [Default: pwd]
+  -h, --help                          Show this help message and exits.
+  -v, --verbose                       Get some extra information from VeGETA during calculation. [Default: False]
+  --version                           Prints the version of VeGETA and exits.
+  -o DIR, --output DIR                Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER    Length of the considered kmer. [Default: 8]
+  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 8]
+  --cutoff CUTOFF                     Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
+                                      neglected for clustering, despite being closely related. [Default: 0.3]
+  -p PROCESSES, --process PROCESSES   Specify the number of CPU cores that are used. [Default: 1]
 
-  -a, --alignment-only    Only performs the alignment calculation, without prior clustering. 
-                          NOTE: This is not recommended for large datasets. [Default: False]
-  -c, --cluster-only      Only performs the clustering step of sequences, without the alignment. [Default: False]
+  -a, --alignment-only                Only performs the alignment calculation, without prior clustering. 
+                                        NOTE: This is not recommended for large datasets. [Default: False]
+  -c, --cluster-only                  Only performs the clustering step of sequences, without the alignment. [Default: False]
   
 
 Version:
@@ -123,26 +126,44 @@ def parse_arguments(d_args):
     logger.error("Couldn't find genome of interest. Check your file")
     exit(1)
 
-  output = d_args['--output']
-  if output == 'pwd':
-    output = os.getcwd()
-  create_outdir(f"{output}/vegeta")
-
   try:
     k = int(d_args['--kmer'])
   except ValueError:
     logger.error("Invalid parameter for k-mer size. Please input a number.")
     exit(2)
   
+  try:
+    proc = int(d_args['--process'])
+  except ValueError:
+    logger.error("Invalid number for CPU cores. Please input a number.")
+    exit(2)
+
+  try:
+    cutoff = float(d_args['--cutoff'])
+  except ValueError:
+    logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
+    exit(2)
+  if not (0 <= cutoff <= 1):
+    logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
+    exit(2)
+  
+  #cutoff = 1 - cutoff
+  
+  output = d_args['--output']
+  if output == 'pwd':
+    output = os.getcwd()
+  create_outdir(f"{output}/vegeta")
+
+
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
 
 
-  return (inputSequences, goi, f"{output}/vegeta", alnOnly, clusterOnly, k)
+  return (inputSequences, goi, f"{output}/vegeta", alnOnly, clusterOnly, k, proc, cutoff)
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
@@ -151,10 +172,11 @@ if __name__ == "__main__":
     logger.info("Only clustering is performed. The alignment calculation will be skipped.")  
   
   if not alnOnly:
-    virusClusterer = Clusterer(inputSequences, k) 
+    virusClusterer = Clusterer(inputSequences, k, cutoff) 
     virusClusterer.determine_profile()
     logger.info("Calculating all pairwise kmer distances. This may take a while.")
-    virusClusterer.pairwise_distances()
+    virusClusterer.pairwise_distances(proc)
+    logger.info("Parsing distance matrix. Writing to output folder.")
     virusClusterer.create_matrix()
     logger.info("Now performing mcl to cluster the sequences.")
     virusClusterer.perform_mcl(outdir)
