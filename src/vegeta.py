@@ -181,4 +181,4 @@ if __name__ == "__main__":
     logger.info("Now performing mcl to cluster the sequences.")
     virusClusterer.perform_mcl(outdir)
     virusClusterer.extract_cluster(outdir)
-    #virusClusterer.get_centroids()
+    virusClusterer.get_centroids(outdir)

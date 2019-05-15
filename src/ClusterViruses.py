@@ -13,7 +13,8 @@ class Clusterer(object):
   """
 
   d_profiles = {}
-  matrix = {}
+  #matrix = {}
+  
   id2header = {}
   header2id = {}
   mclMatrix = ''
@@ -27,13 +28,14 @@ class Clusterer(object):
     self.allKmers = {''.join(kmer):x for x,kmer in enumerate(itertools.product(self.nucleotides, repeat=self.k))}
 
     self.d_sequences = self.read_sequences()
-    
+    self.dim = len(self.d_sequences)
+    self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
 
   def read_sequences(self):
     """
     """
     fastaContent = {}
-    idHead = 0
+    idHead = -1
     with open(self.sequenceFile, 'r') as inputStream:
       header = ''
       seq = ''
@@ -41,9 +43,10 @@ class Clusterer(object):
       for line in inputStream:
         if line.startswith(">"):
           if header:
-            fastaContent[header] = seq
-            self.id2header[str(idHead)] = header
-            self.header2id[header] = str(idHead)
+            #fastaContent[header] = seq
+            fastaContent[idHead] = seq
+            self.id2header[idHead] = header
+            self.header2id[header] = idHead
           header = line.rstrip("\n").replace(':','_').replace(' ','_').lstrip(">")
           seq = ''
           idHead += 1
@@ -63,7 +66,7 @@ class Clusterer(object):
           self.d_profiles[header][self.allKmers[k]] += 1 
         except KeyError:
           continue
-      self.matrix[header] = []
+      #self.matrix[header] = []
     
 
   def calc_pd(self, seqs):
@@ -72,49 +75,71 @@ class Clusterer(object):
     profile1 = np.array(self.d_profiles[seq1])
     profile2 = np.array(self.d_profiles[seq2])
     distance = np.sqrt(np.sum((profile1 - profile2)**2))
-      
-    return {seq1 : (seq2, distance), seq2 : (seq1, distance)}
+    #print(distance)
+    return (seq1, seq2, distance)
+    
+    #print(self.matrix)
+    #return {seq1 : (seq2, distance), seq2 : (seq1, distance)}
 
 
   def pairwise_distances(self, proc):
     """
     """
     p = Pool(processes=proc)
-    distances = (p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)))
-    
-    for pairwiseDist in distances:
-      for first,second in pairwiseDist.items():
-        self.matrix[first].append(second)
+    #p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2))
+    for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)):
+      self.matrix[seq1][seq2] = dist
+      self.matrix[seq2][seq1] = dist
+    #for pairwiseDist in distances:
+      #for first,second in pairwiseDist.items():
+      #  self.matrix[first][second] = 
+        #self.matrix[first].append(second)
+
+    self.matrix[self.matrix == 0] = np.nan
+    normalize = self.normalize_function()
+    self.normalize_matrix(normalize)
       
   def normalize_function(self):
     """
     """
-    allDistances = []
+    #allDistances = []
     
-    for row in self.matrix.values():
-      for _, distance in row:
-        allDistances.append(distance)
-    
+    #for row in self.matrix.values():
+    #  for _, distance in row:
+    #    allDistances.append(distance)
+    minimum = np.nanmin(self.matrix)
+    maximum = np.nanmax(self.matrix)
+    cutoff = self.cutoff
     def normalize(x):
-      return 1-((x - min(allDistances)) / (max(allDistances) - min(allDistances)))
+      normalizedDist = 1-((x - minimum) / (maximum - minimum))
+
+      return normalizedDist if normalizedDist > cutoff else 0
+      #return 1-((x - min(allDistances)) / (max(allDistances) - min(allDistances)))
 
     return normalize
+
+  def normalize_matrix(self,f):
+    
+    newMatrix =  np.zeros(shape=(self.dim, self.dim),dtype=float)
+    for i, row in enumerate(self.matrix):
+      for j, _ in enumerate(row):
+        if i != j:
+          newMatrix[i][j] = f(self.matrix[i][j])
+    self.matrix = newMatrix    
 
 
   def create_matrix(self):
     """
     """
     self.mclMatrix = f"(mclheader\nmcltype matrix\ndimensions {len(self.d_sequences)}x{len(self.d_sequences)}\n)\n"
-    self.mclMatrix += f"(mcldoms\n{' '.join(self.id2header)} $\n)\n"
+    self.mclMatrix += f"(mcldoms\n{' '.join(map(str,self.id2header))} $\n)\n"
     self.mclMatrix += f"(mclmatrix\nbegin\n"
-    normalize = self.normalize_function()
-  
-    for header, distances in self.matrix.items():
-      row = self.header2id[header]
-      consideredDistances = ' '.join([f'{self.header2id[node]}:{normalize(dist)}' for node, dist in distances if normalize(dist) > self.cutoff])
-      
+    
+    for row, entries in enumerate(self.matrix):
+      consideredDistances = ' '.join([f'{col}:{dist}' for col, dist in enumerate(entries) if row != col])  
       self.mclMatrix += f"{row} {consideredDistances} $\n"
     self.mclMatrix += ")\n"
+    
       
   def perform_mcl(self, outdir):
     """
@@ -142,19 +167,47 @@ class Clusterer(object):
 
         if line[-1] == '$':
           line = line[:-1]
-
+        line = list(map(int, line))
         if cluster[0]:
           if newCluster:
             self.allCluster.append(newCluster)
-          newCluster = [self.id2header[x] for x in line[1:]]
+          #newCluster = [self.id2header[x] for x in line[1:]]
+          newCluster = line[1:]
         else:
-          newCluster.extend([self.id2header[x] for x in line])
+          newCluster.extend(line)
 
-    #print(self.allCluster)
     
 
-  def get_centroids(self):
+  def get_centroids(self, outdir):
     """
     """
-    pass
+    centroids = []
+    for cluster in self.allCluster:
+
+      tmpMinimum = 5
+      centroidOfCluster = -1
+
+      if len(cluster) == 1:
+        centroidOfCluster = cluster[0]
+        centroids.append(centroidOfCluster)
+        break
+
+      for sequence in cluster:
+        averagedDistance = 0
+        for neighborSequence in cluster:
+          if sequence == neighborSequence: 
+            continue
+          averagedDistance += self.matrix[sequence][neighborSequence]
+        averagedDistance /= len(cluster)-1
+
+    
+        if averagedDistance < tmpMinimum:
+          tmpMinimum = averagedDistance
+          centroidOfCluster = sequence
+        
+      centroids.append(centroidOfCluster)
+    
+    with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
+      for centroid in centroids:
+        outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
 
