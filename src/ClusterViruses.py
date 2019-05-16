@@ -99,7 +99,7 @@ class Clusterer(object):
     def normalize(x):
       normalizedDist = 1-((x - minimum) / (maximum - minimum))
       #return normalizedDist
-      return normalizedDist if normalizedDist != np.nan else 1
+      return normalizedDist if normalizedDist > 0 else 1
       
     return normalize
 
