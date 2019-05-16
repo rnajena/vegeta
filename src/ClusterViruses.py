@@ -12,9 +12,7 @@ class Clusterer(object):
   """
   """
 
-  d_profiles = {}
-  #matrix = {}
-  
+  d_profiles = {} 
   id2header = {}
   header2id = {}
   mclMatrix = ''
@@ -43,7 +41,6 @@ class Clusterer(object):
       for line in inputStream:
         if line.startswith(">"):
           if header:
-            #fastaContent[header] = seq
             fastaContent[idHead] = seq
             self.id2header[idHead] = header
             self.header2id[header] = idHead
@@ -53,7 +50,6 @@ class Clusterer(object):
         else:
           seq += line.rstrip("\n").upper().replace('U','T')
     return fastaContent
-
 
   def determine_profile(self):
     """
@@ -66,34 +62,22 @@ class Clusterer(object):
           self.d_profiles[header][self.allKmers[k]] += 1 
         except KeyError:
           continue
-      #self.matrix[header] = []
     
-
   def calc_pd(self, seqs):
     seq1, seq2 = seqs
     
     profile1 = np.array(self.d_profiles[seq1])
     profile2 = np.array(self.d_profiles[seq2])
     distance = np.sqrt(np.sum((profile1 - profile2)**2))
-    #print(distance)
     return (seq1, seq2, distance)
-    
-    #print(self.matrix)
-    #return {seq1 : (seq2, distance), seq2 : (seq1, distance)}
-
 
   def pairwise_distances(self, proc):
     """
     """
     p = Pool(processes=proc)
-    #p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2))
     for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)):
       self.matrix[seq1][seq2] = dist
       self.matrix[seq2][seq1] = dist
-    #for pairwiseDist in distances:
-      #for first,second in pairwiseDist.items():
-      #  self.matrix[first][second] = 
-        #self.matrix[first].append(second)
 
     self.matrix[self.matrix == 0] = np.nan
     normalize = self.normalize_function()
@@ -102,24 +86,20 @@ class Clusterer(object):
   def normalize_function(self):
     """
     """
-    #allDistances = []
     
-    #for row in self.matrix.values():
-    #  for _, distance in row:
-    #    allDistances.append(distance)
     minimum = np.nanmin(self.matrix)
     maximum = np.nanmax(self.matrix)
     cutoff = self.cutoff
+
     def normalize(x):
       normalizedDist = 1-((x - minimum) / (maximum - minimum))
-
       return normalizedDist if normalizedDist > cutoff else 0
-      #return 1-((x - min(allDistances)) / (max(allDistances) - min(allDistances)))
-
+      
     return normalize
 
   def normalize_matrix(self,f):
-    
+    """
+    """
     newMatrix =  np.zeros(shape=(self.dim, self.dim),dtype=float)
     for i, row in enumerate(self.matrix):
       for j, _ in enumerate(row):
@@ -136,7 +116,7 @@ class Clusterer(object):
     self.mclMatrix += f"(mclmatrix\nbegin\n"
     
     for row, entries in enumerate(self.matrix):
-      consideredDistances = ' '.join([f'{col}:{dist}' for col, dist in enumerate(entries) if row != col])  
+      consideredDistances = ' '.join([f'{col}:{dist}' for col, dist in enumerate(entries) if row != col and dist != 0.0])  
       self.mclMatrix += f"{row} {consideredDistances} $\n"
     self.mclMatrix += ")\n"
     
@@ -168,15 +148,13 @@ class Clusterer(object):
         if line[-1] == '$':
           line = line[:-1]
         line = list(map(int, line))
+
         if cluster[0]:
           if newCluster:
             self.allCluster.append(newCluster)
-          #newCluster = [self.id2header[x] for x in line[1:]]
           newCluster = line[1:]
         else:
           newCluster.extend(line)
-
-    
 
   def get_centroids(self, outdir):
     """
@@ -210,4 +188,3 @@ class Clusterer(object):
     with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
       for centroid in centroids:
         outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
-

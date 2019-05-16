@@ -91,7 +91,7 @@ def create_logger():
 
 def create_outdir(outdir):
     try:
-      os.mkdir(outdir)
+      os.makedirs(outdir)
       logger.info(f"Creating output directory: {outdir}")
     except FileExistsError:
       logger.warning(f"The output directory exists. Files will be overwritten.")
@@ -146,9 +146,7 @@ def parse_arguments(d_args):
   if not (0 <= cutoff <= 1):
     logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
     exit(2)
-  
-  #cutoff = 1 - cutoff
-  
+    
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
