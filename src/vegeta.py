@@ -61,8 +61,12 @@ import logging
 from colorlog import ColoredFormatter
 from docopt import docopt
 
-from ClusterViruses import Clusterer
+def warn(*args, **kwargs):
+    pass
+import warnings
+warnings.warn = warn
 
+from ClusterViruses import Clusterer
 
 def create_logger():
     """
@@ -174,9 +178,7 @@ if __name__ == "__main__":
     virusClusterer.determine_profile()
     logger.info("Calculating all pairwise kmer distances. This may take a while.")
     virusClusterer.pairwise_distances(proc)
-    logger.info("Parsing distance matrix. Writing to output folder.")
-    virusClusterer.create_matrix()
-    logger.info("Now performing mcl to cluster the sequences.")
-    virusClusterer.perform_mcl(outdir)
-    virusClusterer.extract_cluster(outdir)
-    virusClusterer.get_centroids(outdir)
+    logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
+    virusClusterer.apply_umap()
+    logger.info("")
+    virusClusterer.get_centroids()

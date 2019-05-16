@@ -8,6 +8,9 @@ import math
 import numpy as np
 import os
 
+import umap.umap_ as umap
+import hdbscan
+
 class Clusterer(object):
   """
   """
@@ -34,6 +37,7 @@ class Clusterer(object):
     """
     fastaContent = {}
     idHead = -1
+    uniqueSeqs = set()
     with open(self.sequenceFile, 'r') as inputStream:
       header = ''
       seq = ''
@@ -41,9 +45,10 @@ class Clusterer(object):
       for line in inputStream:
         if line.startswith(">"):
           if header:
-            fastaContent[idHead] = seq
-            self.id2header[idHead] = header
-            self.header2id[header] = idHead
+            if not seq in uniqueSeqs:
+              fastaContent[idHead] = seq
+              self.id2header[idHead] = header
+              self.header2id[header] = idHead
           header = line.rstrip("\n").replace(':','_').replace(' ','_').lstrip(">")
           seq = ''
           idHead += 1
@@ -89,11 +94,12 @@ class Clusterer(object):
     
     minimum = np.nanmin(self.matrix)
     maximum = np.nanmax(self.matrix)
-    cutoff = self.cutoff
+    #cutoff = self.cutoff
 
     def normalize(x):
       normalizedDist = 1-((x - minimum) / (maximum - minimum))
-      return normalizedDist if normalizedDist > cutoff else 0
+      #return normalizedDist
+      return normalizedDist if normalizedDist != np.nan else 1
       
     return normalize
 
@@ -188,3 +194,17 @@ class Clusterer(object):
     with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
       for centroid in centroids:
         outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
+
+
+  def apply_umap(self):
+    clusterable_embedding = umap.UMAP(
+          n_neighbors=30,
+          min_dist=0.0,
+          n_components=10,
+          random_state=42,
+      ).fit_transform(self.matrix)
+    
+    clusterer = hdbscan.HDBSCAN()
+    clusterer.fit(clusterable_embedding)
+
+    print(clusterer.labels_)
