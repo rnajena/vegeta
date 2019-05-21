@@ -181,4 +181,4 @@ if __name__ == "__main__":
     logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
     virusClusterer.apply_umap()
     logger.info("")
-    #virusClusterer.get_centroids()
+    virusClusterer.get_centroids(outdir)

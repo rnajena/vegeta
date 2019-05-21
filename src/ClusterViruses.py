@@ -31,6 +31,7 @@ class Clusterer(object):
     self.d_sequences = self.read_sequences()
     self.dim = len(self.d_sequences)
     self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
+    #self.profiles = np.zeros(shape=(self.dim, len(self.allKmers)), dtype=int)
 
   def read_sequences(self):
     """
@@ -65,6 +66,7 @@ class Clusterer(object):
       for k in kmer:
         try:
           self.d_profiles[header][self.allKmers[k]] += 1 
+          #self.profiles[header][self.allKmers[k]] += 1
         except KeyError:
           continue
     
@@ -73,6 +75,9 @@ class Clusterer(object):
     
     profile1 = np.array(self.d_profiles[seq1])
     profile2 = np.array(self.d_profiles[seq2])
+    #profile1 = np.array(self.profiles[seq1])
+    #profile2 = np.array(self.profiles[seq2])
+
     distance = np.sqrt(np.sum((profile1 - profile2)**2))
     return (seq1, seq2, distance)
 
@@ -84,9 +89,9 @@ class Clusterer(object):
       self.matrix[seq1][seq2] = dist
       self.matrix[seq2][seq1] = dist
 
-    self.matrix[self.matrix == 0] = np.nan
-    normalize = self.normalize_function()
-    self.normalize_matrix(normalize)
+    #self.matrix[self.matrix == 0] = np.nan
+    #normalize = self.normalize_function()
+    #self.normalize_matrix(normalize)
       
   def normalize_function(self):
     """
@@ -166,45 +171,80 @@ class Clusterer(object):
     """
     """
     centroids = []
-    for cluster in self.allCluster:
-
-      tmpMinimum = 5
+    seqCluster = { x : [] for x in set(self.allCluster)}
+    for idx, cluster in enumerate(self.allCluster):
+      seqCluster[cluster].append(idx)
+      
+    for cluster, sequences in seqCluster.items():
+      tmpMinimum = math.inf
       centroidOfCluster = -1
-
-      if len(cluster) == 1:
+      if len(sequences) == 1:
         centroidOfCluster = cluster[0]
         centroids.append(centroidOfCluster)
-        break
-
-      for sequence in cluster:
+        continue
+      for sequence in sequences:
         averagedDistance = 0
-        for neighborSequence in cluster:
-          if sequence == neighborSequence: 
+        for neighborSequence in sequences:
+          if sequence == neighborSequence:
             continue
           averagedDistance += self.matrix[sequence][neighborSequence]
-        averagedDistance /= len(cluster)-1
-
-    
+        averagedDistance /= len(sequences)-1
+        #print(averagedDistance)
         if averagedDistance < tmpMinimum:
           tmpMinimum = averagedDistance
           centroidOfCluster = sequence
         
       centroids.append(centroidOfCluster)
-    
     with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
       for centroid in centroids:
         outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
 
 
+      
+      #tmpMinimum = 5
+      #centroidOfCluster = -1
+
+      # if len(cluster) == 1:
+      #   centroidOfCluster = cluster[0]
+      #   centroids.append(centroidOfCluster)
+      #   break
+
+      # for sequence in cluster:
+      #   averagedDistance = 0
+      #   for neighborSequence in cluster:
+      #     if sequence == neighborSequence: 
+      #       continue
+      #     averagedDistance += self.matrix[sequence][neighborSequence]
+      #   averagedDistance /= len(cluster)-1
+
+    
+      #   if averagedDistance < tmpMinimum:
+      #     tmpMinimum = averagedDistance
+      #     centroidOfCluster = sequence
+        
+      # centroids.append(centroidOfCluster)
+    
+    #with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
+    #  for centroid in centroids:
+    #    outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
+
+
   def apply_umap(self):
+    profiles = []
+    for idx, key in enumerate(self.d_profiles):
+      profiles.append(self.d_profiles[idx])
+    #profiles = self.d_profiles
+
+
+
     clusterable_embedding = umap.UMAP(
           n_neighbors=30,
           min_dist=0.0,
           n_components=10,
           random_state=42,
-      ).fit_transform(self.matrix)
+      ).fit_transform(profiles)
     
     clusterer = hdbscan.HDBSCAN()
     clusterer.fit(clusterable_embedding)
-
-    print(clusterer.labels_)
+    self.allCluster = clusterer.labels_
+    #print(clusterer.labels_)
