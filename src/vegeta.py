@@ -58,6 +58,8 @@ import sys
 import os
 import logging
 
+import numpy as np
+
 from colorlog import ColoredFormatter
 from docopt import docopt
 
@@ -81,8 +83,8 @@ def create_logger():
 
     formatter = ColoredFormatter("%(log_color)sVeGETA %(levelname)s -- %(asctime)s -- %(message)s", "%Y-%m-%d %H:%M:%S", 
                                     log_colors={
-                                            'DEBUG':    'bold_cyan',
-                                            'INFO':     'bold_green',
+                                            'DEBUG':    'bold_green',
+                                            'INFO':     'bold_cyan',
                                             'WARNING':  'bold_yellow',
                                             'ERROR':    'bold_red',
                                             'CRITICAL': 'bold_red'}
@@ -174,11 +176,18 @@ if __name__ == "__main__":
     logger.info("Only clustering is performed. The alignment calculation will be skipped.")  
   
   if not alnOnly:
-    virusClusterer = Clusterer(inputSequences, k, cutoff) 
+    virusClusterer = Clusterer(inputSequences, k, cutoff)
+    logger.info("Determining k-mer profiles for all sequences.")
     virusClusterer.determine_profile()
-    logger.info("Calculating all pairwise kmer distances. This may take a while.")
+    logger.info("Calculating all pairwise distances. This may take a while.")
     virusClusterer.pairwise_distances(proc)
     logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
     virusClusterer.apply_umap()
-    logger.info("")
+    clusterInfo = virusClusterer.allCluster
+    logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
+    logger.info(f"{virusClusterer.probabilities}")
+
+    #logger.info("Extracting centroid sequences and writing results to file.")
     virusClusterer.get_centroids(outdir)
+
+    

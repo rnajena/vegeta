@@ -8,6 +8,9 @@ import math
 import numpy as np
 import os
 
+import scipy
+import random
+
 import umap.umap_ as umap
 import hdbscan
 
@@ -20,6 +23,8 @@ class Clusterer(object):
   header2id = {}
   mclMatrix = ''
   allCluster = []
+  dim = 0
+  probabilities = []
 
   def __init__(self, sequenceFile, k, cutoff):
     self.sequenceFile = sequenceFile
@@ -55,6 +60,7 @@ class Clusterer(object):
           idHead += 1
         else:
           seq += line.rstrip("\n").upper().replace('U','T')
+
     return fastaContent
 
   def determine_profile(self):
@@ -78,7 +84,8 @@ class Clusterer(object):
     #profile1 = np.array(self.profiles[seq1])
     #profile2 = np.array(self.profiles[seq2])
 
-    distance = np.sqrt(np.sum((profile1 - profile2)**2))
+    #distance = np.sqrt(np.sum((profile1 - profile2)**2))
+    distance = scipy.spatial.distance.cosine(profile1, profile2)
     return (seq1, seq2, distance)
 
   def pairwise_distances(self, proc):
@@ -176,6 +183,8 @@ class Clusterer(object):
       seqCluster[cluster].append(idx)
       
     for cluster, sequences in seqCluster.items():
+      if cluster == -1:
+        continue
       tmpMinimum = math.inf
       centroidOfCluster = -1
       if len(sequences) == 1:
@@ -189,7 +198,6 @@ class Clusterer(object):
             continue
           averagedDistance += self.matrix[sequence][neighborSequence]
         averagedDistance /= len(sequences)-1
-        #print(averagedDistance)
         if averagedDistance < tmpMinimum:
           tmpMinimum = averagedDistance
           centroidOfCluster = sequence
@@ -200,45 +208,17 @@ class Clusterer(object):
         outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
 
 
-      
-      #tmpMinimum = 5
-      #centroidOfCluster = -1
-
-      # if len(cluster) == 1:
-      #   centroidOfCluster = cluster[0]
-      #   centroids.append(centroidOfCluster)
-      #   break
-
-      # for sequence in cluster:
-      #   averagedDistance = 0
-      #   for neighborSequence in cluster:
-      #     if sequence == neighborSequence: 
-      #       continue
-      #     averagedDistance += self.matrix[sequence][neighborSequence]
-      #   averagedDistance /= len(cluster)-1
-
-    
-      #   if averagedDistance < tmpMinimum:
-      #     tmpMinimum = averagedDistance
-      #     centroidOfCluster = sequence
-        
-      # centroids.append(centroidOfCluster)
-    
-    #with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
-    #  for centroid in centroids:
-    #    outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
 
 
   def apply_umap(self):
     profiles = []
-    for idx, key in enumerate(self.d_profiles):
+    for idx, _ in enumerate(self.d_profiles):
       profiles.append(self.d_profiles[idx])
-    #profiles = self.d_profiles
+    
 
-
-
+    #for neighbors in range(10,200,10):
     clusterable_embedding = umap.UMAP(
-          n_neighbors=30,
+          n_neighbors=20,
           min_dist=0.0,
           n_components=10,
           random_state=42,
@@ -246,5 +226,11 @@ class Clusterer(object):
     
     clusterer = hdbscan.HDBSCAN()
     clusterer.fit(clusterable_embedding)
+      #logger.info(clusterer.labels_.max(), type(clusterer.labels_.max()))
+
+     # if 10 < clusterer.labels_.max() < 15:
+     #   break
+
     self.allCluster = clusterer.labels_
+    self.probabilities = clusterer.probabilities_
     #print(clusterer.labels_)
