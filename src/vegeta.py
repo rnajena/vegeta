@@ -179,15 +179,15 @@ if __name__ == "__main__":
     virusClusterer = Clusterer(inputSequences, k, cutoff)
     logger.info("Determining k-mer profiles for all sequences.")
     virusClusterer.determine_profile()
-    logger.info("Calculating all pairwise distances. This may take a while.")
-    virusClusterer.pairwise_distances(proc)
+    #logger.info("Calculating all pairwise distances. This may take a while.")
+    #virusClusterer.pairwise_distances(proc)
     logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
     virusClusterer.apply_umap()
     clusterInfo = virusClusterer.allCluster
     logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
-    logger.info(f"{virusClusterer.probabilities}")
+    logger.info(f"{np.mean(virusClusterer.probabilities)}")
 
-    #logger.info("Extracting centroid sequences and writing results to file.")
-    virusClusterer.get_centroids(outdir)
+    logger.info("Extracting centroid sequences and writing results to file.")
+    virusClusterer.get_centroids(outdir, proc)
 
     

@@ -26,7 +26,7 @@ class Clusterer(object):
   dim = 0
   probabilities = []
 
-  def __init__(self, sequenceFile, k, cutoff):
+  def __init__(self, sequenceFile, k, cutoff, proc):
     self.sequenceFile = sequenceFile
     self.k = k
     self.cutoff = cutoff
@@ -36,7 +36,7 @@ class Clusterer(object):
     self.d_sequences = self.read_sequences()
     self.dim = len(self.d_sequences)
     self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
-    #self.profiles = np.zeros(shape=(self.dim, len(self.allKmers)), dtype=int)
+    self.pool = Pool(proc)
 
   def read_sequences(self):
     """
@@ -61,6 +61,9 @@ class Clusterer(object):
         else:
           seq += line.rstrip("\n").upper().replace('U','T')
 
+      fastaContent[idHead] = seq
+      self.id2header[idHead] = header
+      self.header2id[header] = idHead
     return fastaContent
 
   def determine_profile(self):
@@ -95,10 +98,6 @@ class Clusterer(object):
     for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)):
       self.matrix[seq1][seq2] = dist
       self.matrix[seq2][seq1] = dist
-
-    #self.matrix[self.matrix == 0] = np.nan
-    #normalize = self.normalize_function()
-    #self.normalize_matrix(normalize)
       
   def normalize_function(self):
     """
@@ -123,68 +122,28 @@ class Clusterer(object):
       for j, _ in enumerate(row):
         if i != j:
           newMatrix[i][j] = f(self.matrix[i][j])
-    self.matrix = newMatrix    
-
-
-  def create_matrix(self):
-    """
-    """
-    self.mclMatrix = f"(mclheader\nmcltype matrix\ndimensions {len(self.d_sequences)}x{len(self.d_sequences)}\n)\n"
-    self.mclMatrix += f"(mcldoms\n{' '.join(map(str,self.id2header))} $\n)\n"
-    self.mclMatrix += f"(mclmatrix\nbegin\n"
-    
-    for row, entries in enumerate(self.matrix):
-      consideredDistances = ' '.join([f'{col}:{dist}' for col, dist in enumerate(entries) if row != col and dist != 0.0])  
-      self.mclMatrix += f"{row} {consideredDistances} $\n"
-    self.mclMatrix += ")\n"
-    
+    self.matrix = newMatrix      
       
-  def perform_mcl(self, outdir):
-    """
-    """
-    with open(f"{outdir}/mclInput.txt", 'w') as outputStream:
-      outputStream.write(self.mclMatrix)
-    os.system(f"mcl {outdir}/mclInput.txt -I 9 -o {outdir}/mclClustered.txt 2>/dev/null")
-    
-  def extract_cluster(self, outdir):
-    """
-    """
-    with open(f'{outdir}/mclClustered.txt', 'r') as inputStream:
-      while not inputStream.readline().startswith('begin'):
-        continue
-
-      newCluster = []
-
-      for line in inputStream:
-        if line.startswith(')'):
-          self.allCluster.append(newCluster)
-          break
-  
-        cluster = line.rstrip("$\n").split(' ')
-        line = line.rstrip("$\n").split()
-
-        if line[-1] == '$':
-          line = line[:-1]
-        line = list(map(int, line))
-
-        if cluster[0]:
-          if newCluster:
-            self.allCluster.append(newCluster)
-          newCluster = line[1:]
-        else:
-          newCluster.extend(line)
-
-  def get_centroids(self, outdir):
+  def get_centroids(self, outdir, proc):
     """
     """
     centroids = []
     seqCluster = { x : [] for x in set(self.allCluster)}
+    
     for idx, cluster in enumerate(self.allCluster):
       seqCluster[cluster].append(idx)
-      
+
     for cluster, sequences in seqCluster.items():
+      # the -1 cluster from HDBSCAN is unclassified and thus ignored
       if cluster == -1:
         continue
+      subProfiles = {seq : profile for seq,profile in self.d_profiles.items() if seq in sequences}
+
+      
+      for seq1, seq2, dist in self.pool.map(self.calc_pd, itertools.combinations(subProfiles, 2)):
+        self.matrix[seq1][seq2] = dist
+        self.matrix[seq2][seq1] = dist
+
       tmpMinimum = math.inf
       centroidOfCluster = -1
       if len(sequences) == 1:
@@ -214,9 +173,7 @@ class Clusterer(object):
     profiles = []
     for idx, _ in enumerate(self.d_profiles):
       profiles.append(self.d_profiles[idx])
-    
-
-    #for neighbors in range(10,200,10):
+  
     clusterable_embedding = umap.UMAP(
           n_neighbors=20,
           min_dist=0.0,
@@ -226,11 +183,6 @@ class Clusterer(object):
     
     clusterer = hdbscan.HDBSCAN()
     clusterer.fit(clusterable_embedding)
-      #logger.info(clusterer.labels_.max(), type(clusterer.labels_.max()))
-
-     # if 10 < clusterer.labels_.max() < 15:
-     #   break
 
     self.allCluster = clusterer.labels_
     self.probabilities = clusterer.probabilities_
-    #print(clusterer.labels_)
