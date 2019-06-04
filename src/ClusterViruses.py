@@ -26,7 +26,7 @@ class Clusterer(object):
   dim = 0
   probabilities = []
 
-  def __init__(self, sequenceFile, k, cutoff, proc):
+  def __init__(self, sequenceFile, k, cutoff):
     self.sequenceFile = sequenceFile
     self.k = k
     self.cutoff = cutoff
@@ -36,7 +36,7 @@ class Clusterer(object):
     self.d_sequences = self.read_sequences()
     self.dim = len(self.d_sequences)
     self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
-    self.pool = Pool(proc)
+
 
   def read_sequences(self):
     """
@@ -129,7 +129,8 @@ class Clusterer(object):
     """
     centroids = []
     seqCluster = { x : [] for x in set(self.allCluster)}
-    
+    p = Pool(proc)  
+
     for idx, cluster in enumerate(self.allCluster):
       seqCluster[cluster].append(idx)
 
@@ -140,7 +141,7 @@ class Clusterer(object):
       subProfiles = {seq : profile for seq,profile in self.d_profiles.items() if seq in sequences}
 
       
-      for seq1, seq2, dist in self.pool.map(self.calc_pd, itertools.combinations(subProfiles, 2)):
+      for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(subProfiles, 2)):
         self.matrix[seq1][seq2] = dist
         self.matrix[seq2][seq1] = dist
 

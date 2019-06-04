@@ -60,6 +60,8 @@ import logging
 
 import numpy as np
 
+from datetime import datetime
+
 from colorlog import ColoredFormatter
 from docopt import docopt
 
@@ -156,14 +158,15 @@ def parse_arguments(d_args):
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
-  create_outdir(f"{output}/vegeta")
+  now = str(datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
+  create_outdir(f"{output}/vegeta-{now}")
 
 
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
 
 
-  return (inputSequences, goi, f"{output}/vegeta", alnOnly, clusterOnly, k, proc, cutoff)
+  return (inputSequences, goi, f"{output}/vegeta-{now}", alnOnly, clusterOnly, k, proc, cutoff)
 
 if __name__ == "__main__":
   logger = create_logger()
@@ -179,15 +182,24 @@ if __name__ == "__main__":
     virusClusterer = Clusterer(inputSequences, k, cutoff)
     logger.info("Determining k-mer profiles for all sequences.")
     virusClusterer.determine_profile()
-    #logger.info("Calculating all pairwise distances. This may take a while.")
-    #virusClusterer.pairwise_distances(proc)
+    # logger.info("Calculating all pairwise distances. This may take a while.")
+    # virusClusterer.pairwise_distances(proc)
     logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
     virusClusterer.apply_umap()
     clusterInfo = virusClusterer.allCluster
     logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
-    logger.info(f"{np.mean(virusClusterer.probabilities)}")
+    # logger.info(f"{np.mean(virusClusterer.probabilities)}")
 
     logger.info("Extracting centroid sequences and writing results to file.")
     virusClusterer.get_centroids(outdir, proc)
+
+    """
+    Clustering of input sequences done.
+    """
+
+    logger.info("Starting the alignment step of VeGETA.")
+    logger.info("Calculating initial mafft alignment")
+
+    
 
     
