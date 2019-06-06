@@ -40,7 +40,7 @@ Options:
   --version                           Prints the version of VeGETA and exits.
   -o DIR, --output DIR                Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 8]
+  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 9]
   --cutoff CUTOFF                     Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
                                       neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES   Specify the number of CPU cores that are used. [Default: 1]
@@ -59,11 +59,13 @@ import os
 import logging
 
 import numpy as np
+from multiprocessing import Pool
 
 from datetime import datetime
 
 from colorlog import ColoredFormatter
 from docopt import docopt
+
 
 def warn(*args, **kwargs):
     pass
@@ -71,6 +73,7 @@ import warnings
 warnings.warn = warn
 
 from ClusterViruses import Clusterer
+from AlignViruses import Aligner
 
 def create_logger():
     """
@@ -85,8 +88,8 @@ def create_logger():
 
     formatter = ColoredFormatter("%(log_color)sVeGETA %(levelname)s -- %(asctime)s -- %(message)s", "%Y-%m-%d %H:%M:%S", 
                                     log_colors={
-                                            'DEBUG':    'bold_green',
-                                            'INFO':     'bold_cyan',
+                                            'DEBUG':    'bold_cyan',
+                                            'INFO':     'bold_white',
                                             'WARNING':  'bold_yellow',
                                             'ERROR':    'bold_red',
                                             'CRITICAL': 'bold_red'}
@@ -159,14 +162,16 @@ def parse_arguments(d_args):
   if output == 'pwd':
     output = os.getcwd()
   now = str(datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
-  create_outdir(f"{output}/vegeta-{now}")
+  #output = f"{output}/vegeta-{now}"
+  output = f"{output}/vegeta"
+  create_outdir(output)
 
 
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
 
 
-  return (inputSequences, goi, f"{output}/vegeta-{now}", alnOnly, clusterOnly, k, proc, cutoff)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff)
 
 if __name__ == "__main__":
   logger = create_logger()
@@ -178,28 +183,35 @@ if __name__ == "__main__":
   if clusterOnly:
     logger.info("Only clustering is performed. The alignment calculation will be skipped.")  
   
-  if not alnOnly:
-    virusClusterer = Clusterer(inputSequences, k, cutoff)
-    logger.info("Determining k-mer profiles for all sequences.")
-    virusClusterer.determine_profile()
-    # logger.info("Calculating all pairwise distances. This may take a while.")
-    # virusClusterer.pairwise_distances(proc)
-    logger.info("Parsing distance matrix. Clustering with UMAP and HDBSCAN.")
-    virusClusterer.apply_umap()
-    clusterInfo = virusClusterer.allCluster
-    logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
-    # logger.info(f"{np.mean(virusClusterer.probabilities)}")
+  multiPool = Pool(processes=proc)
+  virusClusterer = Clusterer(inputSequences, k, cutoff, proc)
+  logger.info("Determining k-mer profiles for all sequences.")
+  virusClusterer.determine_profile(proc)
+  logger.info("Clustering with UMAP and HDBSCAN.")
+  virusClusterer.apply_umap()
+  clusterInfo = virusClusterer.allCluster
+  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
+  
 
-    logger.info("Extracting centroid sequences and writing results to file.")
-    virusClusterer.get_centroids(outdir, proc)
+  logger.info("Extracting centroid sequences and writing results to file.\n")
+  virusClusterer.get_centroids(outdir, proc)
 
-    """
-    Clustering of input sequences done.
-    """
+  """
+  Clustering of input sequences done.
+  """
+  clusteredSequences = f'{outdir}/representative_viruses.fa'
+  logger.info("Starting the alignment step of VeGETA.\n")
 
-    logger.info("Starting the alignment step of VeGETA.")
-    logger.info("Calculating initial mafft alignment")
+  if goi:
+    logger.info(f"Including your virus of interest:\n{goi}\n")
+    with open(clusteredSequences, 'a') as outputStream:
+      with open(goi, 'r') as inputStream:
+        outputStream.write("".join(inputStream.readlines()))
 
+  
+  virusAligner = Aligner(logger, clusteredSequences, k, proc)
+  logger.info("Calculating initial mafft alignment")
+  virusAligner.perform_mafft()
     
 
     

@@ -26,12 +26,14 @@ class Clusterer(object):
   dim = 0
   probabilities = []
 
-  def __init__(self, sequenceFile, k, cutoff):
+  def __init__(self, sequenceFile, k, cutoff, proc):
     self.sequenceFile = sequenceFile
     self.k = k
     self.cutoff = cutoff
     self.nucleotides = set(["A","C","G","T"])
     self.allKmers = {''.join(kmer):x for x,kmer in enumerate(itertools.product(self.nucleotides, repeat=self.k))}
+    #self.proc = proc
+    
 
     self.d_sequences = self.read_sequences()
     self.dim = len(self.d_sequences)
@@ -66,74 +68,51 @@ class Clusterer(object):
       self.header2id[header] = idHead
     return fastaContent
 
-  def determine_profile(self):
-    """
-    """
-    for header, sequence in self.d_sequences.items():    
-      self.d_profiles[header] = [0]*len(self.allKmers)
-      kmer = [sequence[start : start + self.k] for start in range(len(sequence) - self.k)]
-      for k in kmer:
+  def profile(self, entry):
+    header, sequence = entry
+    profile = [0]*len(self.allKmers)
+    for k in iter([sequence[start : start + self.k] for start in range(len(sequence) - self.k)]):
         try:
-          self.d_profiles[header][self.allKmers[k]] += 1 
-          #self.profiles[header][self.allKmers[k]] += 1
+          profile[self.allKmers[k]] += 1 
         except KeyError:
           continue
+    return (header, profile)
+
+  def determine_profile(self, proc):
+    p = Pool(proc)
+    for header, profile in p.map(self.profile, self.d_sequences.items()):
+      self.d_profiles[header] = profile
+    p.close()
+    p.join()
     
   def calc_pd(self, seqs):
     seq1, seq2 = seqs
     
     profile1 = np.array(self.d_profiles[seq1])
     profile2 = np.array(self.d_profiles[seq2])
-    #profile1 = np.array(self.profiles[seq1])
-    #profile2 = np.array(self.profiles[seq2])
 
-    #distance = np.sqrt(np.sum((profile1 - profile2)**2))
     distance = scipy.spatial.distance.cosine(profile1, profile2)
     return (seq1, seq2, distance)
 
-  def pairwise_distances(self, proc):
-    """
-    """
-    p = Pool(processes=proc)
-    for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)):
-      self.matrix[seq1][seq2] = dist
-      self.matrix[seq2][seq1] = dist
-      
-  def normalize_function(self):
-    """
-    """
-    
-    minimum = np.nanmin(self.matrix)
-    maximum = np.nanmax(self.matrix)
-    #cutoff = self.cutoff
-
-    def normalize(x):
-      normalizedDist = 1-((x - minimum) / (maximum - minimum))
-      #return normalizedDist
-      return normalizedDist if normalizedDist > 0 else 1
-      
-    return normalize
-
-  def normalize_matrix(self,f):
-    """
-    """
-    newMatrix =  np.zeros(shape=(self.dim, self.dim),dtype=float)
-    for i, row in enumerate(self.matrix):
-      for j, _ in enumerate(row):
-        if i != j:
-          newMatrix[i][j] = f(self.matrix[i][j])
-    self.matrix = newMatrix      
+  #de#f pairwise_distances(self):
+    #"""
+    #p = Pool(processes=self.proc)
+    #for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(self.d_profiles, 2)):
+    #  self.matrix[seq1][seq2] = dist
+    #  self.matrix[seq2][seq1] = dist  
+    #p.close()
       
   def get_centroids(self, outdir, proc):
     """
     """
     centroids = []
     seqCluster = { x : [] for x in set(self.allCluster)}
-    p = Pool(proc)  
+    
 
     for idx, cluster in enumerate(self.allCluster):
       seqCluster[cluster].append(idx)
 
+    p = Pool(proc)    
     for cluster, sequences in seqCluster.items():
       # the -1 cluster from HDBSCAN is unclassified and thus ignored
       if cluster == -1:
@@ -144,6 +123,8 @@ class Clusterer(object):
       for seq1, seq2, dist in p.map(self.calc_pd, itertools.combinations(subProfiles, 2)):
         self.matrix[seq1][seq2] = dist
         self.matrix[seq2][seq1] = dist
+      
+      
 
       tmpMinimum = math.inf
       centroidOfCluster = -1
@@ -163,12 +144,11 @@ class Clusterer(object):
           centroidOfCluster = sequence
         
       centroids.append(centroidOfCluster)
+    p.close()
+    p.join()
     with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
       for centroid in centroids:
         outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
-
-
-
 
   def apply_umap(self):
     profiles = []
