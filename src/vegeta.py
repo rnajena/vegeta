@@ -40,7 +40,7 @@ Options:
   --version                           Prints the version of VeGETA and exits.
   -o DIR, --output DIR                Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 9]
+  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 7]
   --cutoff CUTOFF                     Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
                                       neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES   Specify the number of CPU cores that are used. [Default: 1]
@@ -186,15 +186,15 @@ if __name__ == "__main__":
   multiPool = Pool(processes=proc)
   virusClusterer = Clusterer(inputSequences, k, cutoff, proc)
   logger.info("Determining k-mer profiles for all sequences.")
-  virusClusterer.determine_profile(proc)
+  virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
   virusClusterer.apply_umap()
   clusterInfo = virusClusterer.allCluster
-  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} centroid sequences. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
-  
-
+  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} cluster. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
-  virusClusterer.get_centroids(outdir, proc)
+  virusClusterer.get_centroids(outdir, multiPool)
+
+  exit(0)
 
   """
   Clustering of input sequences done.
