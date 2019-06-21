@@ -8,6 +8,7 @@ import itertools
 import math
 import numpy as np
 import os
+import re
 
 import scipy
 import random
@@ -22,12 +23,13 @@ class Clusterer(object):
   d_profiles = {} 
   id2header = {}
   header2id = {}
-  mclMatrix = ''
   allCluster = []
   dim = 0
   probabilities = []
 
   def __init__(self, sequenceFile, k, cutoff, proc):
+    """
+    """
     self.sequenceFile = sequenceFile
     self.k = k
     self.cutoff = cutoff
@@ -39,11 +41,13 @@ class Clusterer(object):
     self.d_sequences = self.read_sequences()
     self.dim = len(self.d_sequences)
     self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
+    self.centroids = []
+    self.regex_orf = re.compile(r'((ATG|CTG)(...){25,}?(TAG|TAA|TGA))')
 
   def rev_comp(self, sequence):
     """
     """
-    return ("".join([self.d_comp[nt] for nt in sequence[::-1]]))
+    return ("".join([self.d_comp[nt] if nt in self.d_comp else nt for nt in sequence[::-1]]))
     
 
   def read_sequences(self):
@@ -98,80 +102,35 @@ class Clusterer(object):
       self.d_profiles[header] = profile
 
   def calc_pd(self, seqs):
-    seq1, seq2, subProfiles = seqs
+    #seq1, seq2, subProfiles = seqs
     
-    profile1 = np.array(subProfiles[seq1])
-    profile2 = np.array(subProfiles[seq2])
+    
+    #profile1 = np.array(subProfiles[seq1])
+    #profile2 = np.array(subProfiles[seq2])
+    
+    for element in seqs:
+      try:
+        stuff = (element[0], element[1])
+      except TypeError:
+        #print(element)
+        #print(seqs)
+        return None
+    #return (0)
+    
+    seq1, profile1 = seqs[0]
+    seq2, profile2 = seqs[1]
+    #except TypeError:
+    #  print(seqs)
+    #  return (-1, -1, 0)
 
     distance = scipy.spatial.distance.cosine(profile1, profile2)
-    return distance
-    #return (seq1, seq2, distance)
+    #return distance
+    return (seq1, seq2, distance)
     #       
 
-  def get_centroids(self, outdir, proc):
-    """
-    """
-    centroids = []
-    seqCluster = { x : [] for x in set(self.allCluster)}
-
-    for idx, cluster in enumerate(self.allCluster):
-      seqCluster[cluster].append(idx)
-
-    p = Pool(self.proc)
-    centroids = p.map(self.centroid_from_cluster, seqCluster.items())
-    p.close()
-    p.join()
-
-    with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
-      for centroid in centroids:
-        outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
-
-  def centroid_from_cluster(self, d_cluster):
-    cluster, sequences = d_cluster
-    #print(mp.current_process())
-    #print(sequences)
-
-    if cluster == -1:
-        return
-
-    #print(self.d_profiles)
-    subProfiles = {seq : profile for seq, profile in self.d_profiles.items() if seq in sequences}
-    #subProfiles = {idx : profile for idx, (_, profile) in enumerate(subProfiles.items())}
-    #print(subProfiles)
-    
-    for seq1, seq2 in itertools.combinations(subProfiles, 2):
-      dist = self.calc_pd((seq1, seq2, subProfiles))
-      self.matrix[seq1][seq2] = dist
-      self.matrix[seq2][seq1] = dist
-      
-    #print(mp.current_process(), "distances done. Determine centroid")
-    tmpMinimum = math.inf
-    centroidOfCluster = -1
-
-    if len(sequences) == 1:
-      centroidOfCluster = cluster[0]
-     # print(mp.current_process(), "Done:", centroidOfCluster)
-      return centroidOfCluster
-    
-
-    for sequence in sequences:
-      averagedDistance = 0
-
-      for neighborSequence in sequences:
-        if sequence == neighborSequence:
-          continue
-
-        averagedDistance += self.matrix[sequence][neighborSequence]
-      averagedDistance /= len(sequences)-1
-
-      if averagedDistance < tmpMinimum:
-        tmpMinimum = averagedDistance
-        centroidOfCluster = sequence
-
-    #print(mp.current_process(), "Done:", centroidOfCluster)
-    return centroidOfCluster
-
   def apply_umap(self):
+    """
+    """
     profiles = []
     for idx, _ in enumerate(self.d_profiles):
       profiles.append(self.d_profiles[idx])
@@ -188,3 +147,121 @@ class Clusterer(object):
 
     self.allCluster = clusterer.labels_
     self.probabilities = clusterer.probabilities_
+
+  def get_centroids(self, outdir, proc):
+    """
+    """
+    
+    seqCluster = { x : [] for x in set(self.allCluster)}
+
+    for idx, cluster in enumerate(self.allCluster):
+      seqCluster[cluster].append(idx)
+
+    p = Pool(self.proc)
+
+    for cluster, sequences in seqCluster.items():
+      if cluster == -1:
+        continue
+
+      subProfiles = {seq : profile for seq, profile in self.d_profiles.items() if seq in sequences}
+
+
+      for result in p.map(self.calc_pd, itertools.combinations(subProfiles.items(), 2)):
+    #for seq1, seq2 in itertools.combinations(subProfiles, 2):
+        #print(result)
+        seq1, seq2, dist = result
+        #dist = self.calc_pd((seq1, seq2, subProfiles))
+        self.matrix[seq1][seq2] = dist
+        self.matrix[seq2][seq1] = dist
+      
+      tmpMinimum = math.inf
+      centroidOfCluster = -1
+
+      if len(sequences) == 1:
+        centroidOfCluster = cluster[0]
+        self.centroids.append(centroidOfCluster)
+        continue
+    
+      for sequence in sequences:
+        averagedDistance = 0
+
+        for neighborSequence in sequences:
+          if sequence == neighborSequence:
+            continue
+          averagedDistance += self.matrix[sequence][neighborSequence]
+          
+
+        averagedDistance /= len(sequences)-1
+        
+        if averagedDistance < tmpMinimum:
+          tmpMinimum = averagedDistance
+          centroidOfCluster = sequence
+
+      self.centroids.append(centroidOfCluster)
+    #self.centroids = p.map(self.centroid_from_cluster, seqCluster.items())
+    p.close()
+    p.join()
+
+    #with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
+    #  for centroid in centroids:
+    #    outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
+
+  # def centroid_from_cluster(self, d_cluster):
+  #   """
+  #   """
+  #   cluster, sequences = d_cluster
+
+  #   if cluster == -1:
+  #       return
+
+  #   subProfiles = {seq : profile for seq, profile in self.d_profiles.items() if seq in sequences}
+    
+  #   for seq1, seq2 in itertools.combinations(subProfiles, 2):
+  #     dist = self.calc_pd((seq1, seq2, subProfiles))
+  #     self.matrix[seq1][seq2] = dist
+  #     self.matrix[seq2][seq1] = dist
+      
+  #   tmpMinimum = math.inf
+  #   centroidOfCluster = -1
+
+  #   if len(sequences) == 1:
+  #     centroidOfCluster = cluster[0]
+  #     return centroidOfCluster
+    
+  #   for sequence in sequences:
+  #     averagedDistance = 0
+
+  #     for neighborSequence in sequences:
+  #       if sequence == neighborSequence:
+  #         continue
+
+  #       averagedDistance += self.matrix[sequence][neighborSequence]
+  #     averagedDistance /= len(sequences)-1
+
+  #     if averagedDistance < tmpMinimum:
+  #       tmpMinimum = averagedDistance
+  #       centroidOfCluster = sequence
+
+  #   return centroidOfCluster
+
+  def split_centroids(self):
+    """
+    """
+    #print(self.centroids)
+    centroidStrands = {centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids}
+    for centroidID, strands in centroidStrands.items():
+      for strand in strands:
+        matches = self.regex_orf.findall(strand)
+      #matches = [self.regex_orf.findall(strand) for strand in strands]
+        
+        print(centroidID, len(matches))
+        allORFs = "".join([x[0] for x in matches if x])
+        print(len(allORFs)/len(strand))
+        
+        
+        
+      
+      
+      #print(f"Start Codon {[x.count('ATG') for x in strands]}")
+      #print(f"Stop Codon {[len(self.regex_stop.findall(strand)) for strand in strands]}")
+    #print(centroidStrands)

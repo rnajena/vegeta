@@ -190,10 +190,10 @@ if __name__ == "__main__":
   logger.info("Clustering with UMAP and HDBSCAN.")
   virusClusterer.apply_umap()
   clusterInfo = virusClusterer.allCluster
-  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} cluster. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
+  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
   virusClusterer.get_centroids(outdir, multiPool)
-
+  virusClusterer.split_centroids()
   exit(0)
 
   """
