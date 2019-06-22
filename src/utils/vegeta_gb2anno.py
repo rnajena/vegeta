@@ -15,7 +15,6 @@ except IndexError:
   exit(1)
 
 
-#regionsToAnnotate = ["5'UTR", "3'UTR", "mat_peptide"]
 accession = ""
 features = {}
 
@@ -67,8 +66,6 @@ with open(stkAln, 'r') as inputStream:
       alnStart = len(line.rstrip()) - alnLength
       break
       
-#print(alignmentRow)
-
 annoString = ["-"]*len(alignmentRow)
 
 nuclCounter = 0

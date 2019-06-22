@@ -23,7 +23,6 @@ Other Dependencies:
   ViennaRNA package
   MAFFT
   LocARNA
-  mcl
 
 Contact:
   kevin.lamkiewicz@uni-jena.de
