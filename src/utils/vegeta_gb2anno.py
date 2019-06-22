@@ -42,7 +42,7 @@ try:
         features[line[0]] = tuple(map(int, line[1].split('..')))
 
       if "peptide" in line[0]:
-        geneSymbol = inputStream.readline().strip().split("=")[1].strip('"')
+        geneSymbol = inputStream.readline().strip().split("=")[1].strip('"').replace(' ','_')
         features[geneSymbol] = tuple(map(int, line[1].split('..')))
 except FileNotFoundError:
   print("Wasn't able to find the GenBank file. Please check your input")
@@ -50,13 +50,21 @@ except FileNotFoundError:
 
 print(accession)
 print(features)
+wholeAlignment = ''
+
+alnLength = 0
+alnStart = 0
 
 with open(stkAln, 'r') as inputStream:
+  wholeAlignment = ''.join(inputStream.readlines()).rstrip('/\n')
+  inputStream.seek(0)
   for line in inputStream:
     if line.startswith('#'):
       continue
     if line.startswith(accession):
       alignmentRow = line.strip().split()[1]
+      alnLength = len(line.rstrip().split()[1])
+      alnStart = len(line.rstrip()) - alnLength
       break
       
 #print(alignmentRow)
@@ -67,16 +75,19 @@ nuclCounter = 0
 for idx, nt in enumerate(alignmentRow):
   if nt == '-':
     continue
-  #if nt != '-':
   nuclCounter += 1
-  #else:
   
   for region, positions in features.items():
     start, stop = positions
-    if nuclCounter in range(start+20, stop-20, len(region)+50):
-      annoString[idx:idx+len(region)] = region
+
     if nuclCounter in positions:
       annoString[idx] = '|'
-      
 
-print(''.join(annoString))
+    if nuclCounter in range(start+20, stop-20, len(region)+50):
+      annoString[idx:idx+len(region)] = region
+
+annoString[-1] = '|'
+      
+with open(stkAln, 'w') as outputStream:
+  annoString = f"#=GC Annotation{' '*(alnStart-len('#=GC Annotation'))}{''.join(annoString)}"
+  outputStream.write(f"{wholeAlignment}\n{annoString}\n//")
