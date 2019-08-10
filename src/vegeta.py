@@ -64,7 +64,16 @@ from datetime import datetime
 
 from colorlog import ColoredFormatter
 from docopt import docopt
+from Bio import Phylo
 
+inputSequences = None
+goi = None
+outdir = None
+alnOnly = None
+clusterOnly = None
+k = None
+proc = None
+cutoff = None
 
 def warn(*args, **kwargs):
     pass
@@ -172,16 +181,8 @@ def parse_arguments(d_args):
 
   return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff)
 
-if __name__ == "__main__":
-  logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff) = parse_arguments(docopt(__doc__))
+def perform_clustering():
 
-  if alnOnly:
-    logger.info("Skipping clustering and directly calculate the alignment.")
-
-  if clusterOnly:
-    logger.info("Only clustering is performed. The alignment calculation will be skipped.")  
-  
   multiPool = Pool(processes=proc)
   virusClusterer = Clusterer(inputSequences, k, cutoff, proc)
   logger.info("Determining k-mer profiles for all sequences.")
@@ -192,13 +193,13 @@ if __name__ == "__main__":
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
   virusClusterer.get_centroids(outdir, multiPool)
-  virusClusterer.split_centroids()
-  exit(0)
+  virusClusterer.split_centroids(outdir)
 
-  """
-  Clustering of input sequences done.
-  """
-  clusteredSequences = f'{outdir}/representative_viruses.fa'
+def perform_alignment(seq=None):
+  if seq:
+    clusteredSequences = seq
+  else:
+    clusteredSequences = f'{outdir}/representative_viruses.fa'
   logger.info("Starting the alignment step of VeGETA.\n")
 
   if goi:
@@ -210,7 +211,34 @@ if __name__ == "__main__":
   
   virusAligner = Aligner(logger, clusteredSequences, k, proc)
   logger.info("Calculating initial mafft alignment")
-  virusAligner.perform_mafft()
+  virusAligner.calculate_pw_distances()
+  virusAligner.get_tree_from_dist()
+  treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
+  Phylo.write(virusAligner.tree, treePath, 'newick')
+  virusAligner.refine_pairwise_instances(virusAligner.tree, None)
+  
+
+if __name__ == "__main__":
+  logger = create_logger()
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff) = parse_arguments(docopt(__doc__))
+
+  if alnOnly:
+    logger.info("Skipping clustering and directly calculate the alignment.")
+    perform_alignment(seq=inputSequences)
+  elif clusterOnly:
+    logger.info("Only clustering is performed. The alignment calculation will be skipped.")
+    perform_clustering()
+  else:
+    logger.info("Doing both, the clustering and the alignment step.")
+    perform_clustering()
+    perform_alignment()
+
+
+
+  """
+  Clustering of input sequences done.
+  """
+
     
 
     

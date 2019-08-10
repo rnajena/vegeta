@@ -140,6 +140,7 @@ class Clusterer(object):
           min_dist=0.0,
           n_components=10,
           random_state=42,
+          metric='cosine',
       ).fit_transform(profiles)
     
     clusterer = hdbscan.HDBSCAN()
@@ -147,6 +148,16 @@ class Clusterer(object):
 
     self.allCluster = clusterer.labels_
     self.probabilities = clusterer.probabilities_
+
+    print()
+    print()
+
+    for i in set(self.allCluster):
+      print(f"Cluster: {i}")
+      for idx, label in enumerate(self.allCluster):
+        if label == i:
+          print(self.id2header[idx])
+
 
   def get_centroids(self, outdir, proc):
     """
@@ -244,19 +255,24 @@ class Clusterer(object):
 
   #   return centroidOfCluster
 
-  def split_centroids(self):
+  def split_centroids(self, outdir):
     """
     """
     #print(self.centroids)
-    centroidStrands = {centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids}
-    for centroidID, strands in centroidStrands.items():
-      for strand in strands:
-        matches = self.regex_orf.findall(strand)
+    #centroidStrands = {centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids}
+    centroids = { centroid : self.d_sequences[centroid].split("X"*10)[0] for centroid in self.centroids }
+
+    with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
+      for centroidID, sequence in centroids.items():
+        outStream.write(f">{self.id2header[centroidID]}\n{sequence}\n")
+    #for centroidID, strands in centroidStrands.items():
+      #for strand in strands:
+       # matches = self.regex_orf.findall(strand)
       #matches = [self.regex_orf.findall(strand) for strand in strands]
         
-        print(centroidID, len(matches))
-        allORFs = "".join([x[0] for x in matches if x])
-        print(len(allORFs)/len(strand))
+        #print(centroidID, len(matches))
+        #allORFs = "".join([x[0] for x in matches if x])
+        #print(len(allORFs)/len(strand))
         
         
         
