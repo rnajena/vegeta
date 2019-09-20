@@ -11,13 +11,14 @@ try:
   stkAln = sys.argv[2]
 except IndexError:
   print("Please give both files, the annotation and the alignment.")
-  print("python3 gff2anno.py <GB-File> <STK-Aln>")
+  print("python3 vegeta_gb2anno.py <GB-File> <STK-Aln>")
   exit(1)
 
 
 accession = ""
 features = {}
 
+ranges = []
 alignmentRow = ""
 
 try:
@@ -40,9 +41,22 @@ try:
       if "UTR" in line[0]:
         features[line[0]] = tuple(map(int, line[1].split('..')))
 
-      if "peptide" in line[0]:
-        geneSymbol = inputStream.readline().strip().split("=")[1].strip('"').replace(' ','_')
-        features[geneSymbol] = tuple(map(int, line[1].split('..')))
+      try:
+        if "peptide" in line[0]:
+          geneSymbol = ''
+          while not "product" in geneSymbol:
+            geneSymbol = inputStream.readline().strip().split("=")[1].strip('"').replace(' ','_')
+          startAnno = int(line[1].split('..')[0])
+          stopAnno = int(line[1].split('..')[1])
+          if not any([startAnno in x for x in ranges]):
+            features[geneSymbol] = tuple(map(int, line[1].split('..')))
+            ranges.append(range(startAnno,stopAnno))
+            
+
+      except ValueError:
+        continue
+        #print(print(line))
+        #exit(1)
 except FileNotFoundError:
   print("Wasn't able to find the GenBank file. Please check your input")
   exit(2)

@@ -42,6 +42,7 @@ class Clusterer(object):
     self.dim = len(self.d_sequences)
     self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
     self.centroids = []
+    #TODO: der regex muss lazy evaluieren... see whether it does!
     self.regex_orf = re.compile(r'((ATG|CTG)(...){25,}?(TAG|TAA|TGA))')
 
   def rev_comp(self, sequence):

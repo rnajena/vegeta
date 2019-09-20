@@ -23,7 +23,7 @@ try:
     rowContent = {}
 
     for line in inputStream:
-
+    
       if line.startswith('##') or not line.strip():
         continue
 
