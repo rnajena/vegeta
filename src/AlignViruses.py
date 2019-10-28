@@ -4,12 +4,14 @@
 import os
 import sys
 import subprocess
+import copy
 from multiprocessing import Pool
 from collections import Counter
 from itertools import groupby, combinations
 
 from scipy.spatial.distance import squareform
 from Bio.Phylo.TreeConstruction import DistanceTreeConstructor, DistanceMatrix
+from Bio import SeqIO, AlignIO, Phylo
 
 #######################################
 # import sys
@@ -41,6 +43,9 @@ class Aligner(object):
     self.sequences = self.read_sequences()
     self.pwDistances = {}
     self.tree = None
+    self.nodes2leaves = {}
+
+    self.dirName = os.path.dirname(self.inputFile)
 
 
   def __getstate__(self):
@@ -108,7 +113,7 @@ class Aligner(object):
     constuctor = DistanceTreeConstructor()
     self.tree = constuctor.nj(DistanceMatrix(names, dm)) # http://biopython.org/DIST/docs/api/Bio.Phylo.TreeConstruction.DistanceTreeConstructor-class.html
     self.tree.root_at_midpoint()
-    
+    self.nodes2leaves = {x.name : [y.name for y in x.get_terminals()] for x in self.tree.get_nonterminals()}
 
 
   def refine_pairwise_instances(self, tree, msa):
@@ -119,27 +124,27 @@ class Aligner(object):
         return msa
     
 
-    sys.exit(0)
+    
     copiedTree = copy.deepcopy(tree)
     
     resolvableNodes = [clade for clade in copiedTree.get_nonterminals() if clade.count_terminals() == 2]
     finalMSA = None
     for node in resolvableNodes:
         print(f"Resolving {node.name} now.")
-        sequences = {leaf : singleSequences[leaf] for leaf in nodes2leaves[node.name]}
+        sequences = {leaf : self.sequences[leaf] for leaf in self.nodes2leaves[node.name]}
         #print(sequences.keys())
         
         if all([type(x) == str for x in sequences.values()]):
-            with open(f"{tmpdir}/{node.name}.fasta", 'w') as outputStream:
+            with open(f"{self.dirName}/{node.name}.fasta", 'w') as outputStream:
                 for entry in sequences.items():
                     outputStream.write(f">{entry[0]}\n{entry[1]}\n")
         
-            with open(f"{tmpdir}/{node.name}_mafft.aln", 'w') as outputStream:
-                cmd = f"mafft --thread {nCore} --quiet {tmpdir}/{node.name}.fasta"
+            with open(f"{self.dirName}/{node.name}_mafft.aln", 'w') as outputStream:
+                cmd = f"mafft --thread {self.proc} --quiet {self.dirName}/{node.name}.fasta"
                 subprocess.run(cmd.split(), stdout=outputStream, check=True)
         else:
-            with open(f"{tmpdir}/{node.name}_msaTable.txt", 'w') as msaMergeTable:
-                with open(f"{tmpdir}/{node.name}.fasta", 'w') as outputStream:
+            with open(f"{self.dirName}/{node.name}_msaTable.txt", 'w') as msaMergeTable:
+                with open(f"{self.dirName}/{node.name}.fasta", 'w') as outputStream:
                     seqCounter = 0
                     for name, record in sequences.items():
                         if type(record) != str:
@@ -157,48 +162,57 @@ class Aligner(object):
                         
                 
             
-            with open(f"{tmpdir}/{node.name}_mafft.aln", 'w') as outputStream:
-                cmd = f"mafft --thread {nCore} --quiet --merge {tmpdir}/{node.name}_msaTable.txt {tmpdir}/{node.name}.fasta"
+            with open(f"{self.dirName}/{node.name}_mafft.aln", 'w') as outputStream:
+                cmd = f"mafft --thread {self.proc} --quiet --merge {self.dirName}/{node.name}_msaTable.txt {self.dirName}/{node.name}.fasta"
                 subprocess.run(cmd.split(), stdout=outputStream, check=True)
-            
-            
-        currentMSA = AlignIO.read(f"{tmpdir}/{node.name}_mafft.aln", 'fasta')
-        alnLength = len(currentMSA[0])
-        #print("Length after mafft " + str(alnLength))
-        create_locarna_alignments(currentMSA, alnLength, stepSize, windowSize, nCore, tmpdir)
-        
-        locarna_windows = read_locarna_alignments(tmpdir)
-        windowMerger = WindowMerger(locarna_windows, stepSize, windowSize, sequences)
-        
-        mergedAlignment = windowMerger.merge_windows2()
-        #mergedAlignment = windowMerger.mergedAlignment
-        #structureAlignment = format_alignment(mergedAlignment, sequences)
-        structureAlignment = mergedAlignment
-        print([len(v) for k,v in structureAlignment.items()])
-        alnLength = len(list(structureAlignment.values())[0])
-        #print("Length after merged locarna " + str(alnLength))
-        #print(structureAlignment.values())
-        #exit(0)
 
-        localStructures = fold_msa_windowed(list(structureAlignment.values()), windowSize, stepSize, nCore)
-        finalStructure = derive_final_structure(localStructures, alnLength)
-        finalMSA = MultipleSeqAlignment([SeqRecord(Seq(sequence, generic_rna), id=recordID) for recordID, sequence in structureAlignment.items()])
-        #print(finalMSA)
-        #exit(0)
-        os.system(f"rm -r {tmpdir}/final* {tmpdir}/local*")
-        finalMSA.column_annotations['secondary_structure'] = ''.join(finalStructure)
-        
-        singleSequences[node.name] = finalMSA
-        
+        currentMSA = AlignIO.read(f"{self.dirName}/{node.name}_mafft.aln", 'fasta')
+        self.sequences[node.name] = currentMSA
+
         for child in node.get_terminals():
-            copiedTree.collapse(child)
+          copiedTree.collapse(child)
+          
+    return self.refine_pairwise_instances(copiedTree, currentMSA)
+        # continue
+        # currentMSA = AlignIO.read(f"{self.dirName}/{node.name}_mafft.aln", 'fasta')
+        # alnLength = len(currentMSA[0])
+        # #print("Length after mafft " + str(alnLength))
+        # create_locarna_alignments(currentMSA, alnLength, stepSize, windowSize, self.proc, self.dirName)
         
-        outputPath = f"{tmpdir}/{node}_viralign.fasta"
-        AlignIO.write(finalMSA, outputPath, 'fasta')
-        outputPath = f"{tmpdir}/{node}_viralign.stk"
-        AlignIO.write(finalMSA, outputPath, 'stockholm')
+        # locarna_windows = read_locarna_alignments(self.dirName)
+        # windowMerger = WindowMerger(locarna_windows, stepSize, windowSize, sequences)
+        
+        # mergedAlignment = windowMerger.merge_windows2()
+        # #mergedAlignment = windowMerger.mergedAlignment
+        # #structureAlignment = format_alignment(mergedAlignment, sequences)
+        # structureAlignment = mergedAlignment
+        # print([len(v) for k,v in structureAlignment.items()])
+        # alnLength = len(list(structureAlignment.values())[0])
+        # #print("Length after merged locarna " + str(alnLength))
+        # #print(structureAlignment.values())
+        # #exit(0)
+
+        # localStructures = fold_msa_windowed(list(structureAlignment.values()), windowSize, stepSize, self.proc)
+        # finalStructure = derive_final_structure(localStructures, alnLength)
+        # finalMSA = MultipleSeqAlignment([SeqRecord(Seq(sequence, generic_rna), id=recordID) for recordID, sequence in structureAlignment.items()])
+        # #print(finalMSA)
+        # #exit(0)
+        # os.system(f"rm -r {self.dirName}/final* {self.dirName}/local*")
+        # finalMSA.column_annotations['secondary_structure'] = ''.join(finalStructure)
+        
+        # self.sequences[node.name] = finalMSA
+        
+        # for child in node.get_terminals():
+        #     copiedTree.collapse(child)
+        
+        # outputPath = f"{self.dirName}/{node}_viralign.fasta"
+        # AlignIO.write(finalMSA, outputPath, 'fasta')
+        # outputPath = f"{self.dirName}/{node}_viralign.stk"
+        # AlignIO.write(finalMSA, outputPath, 'stockholm')
         #exit(0)
-    return refine_pairwise_instances(copiedTree, finalMSA)
+    #exit(0)
+    #return refine_pairwise_instances(copiedTree, finalMSA)
+
   def perform_mafft(self):
     """
     """

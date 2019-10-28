@@ -210,6 +210,8 @@ def perform_alignment(seq=None):
 
   
   virusAligner = Aligner(logger, clusteredSequences, k, proc)
+  
+
   logger.info("Calculating initial mafft alignment")
   virusAligner.calculate_pw_distances()
   virusAligner.get_tree_from_dist()
