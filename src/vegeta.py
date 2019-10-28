@@ -34,19 +34,22 @@ Usage:
   vegeta.py [options] <inputSequences> [<genomeOfInterest>]
 
 Options:
-  -h, --help                          Show this help message and exits.
-  -v, --verbose                       Get some extra information from VeGETA during calculation. [Default: False]
-  --version                           Prints the version of VeGETA and exits.
-  -o DIR, --output DIR                Specifies the output directory of VeGETA. [Default: pwd]
+  -h, --help                              Show this help message and exits.
+  -v, --verbose                           Get some extra information from VeGETA during calculation. [Default: False]
+  --version                               Prints the version of VeGETA and exits.
+  -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                Length of the considered kmer. [Default: 7]
-  --cutoff CUTOFF                     Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
-                                      neglected for clustering, despite being closely related. [Default: 0.3]
-  -p PROCESSES, --process PROCESSES   Specify the number of CPU cores that are used. [Default: 1]
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
+  --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
+                                          neglected for clustering, despite being closely related. [Default: 0.3]
+  -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
 
-  -a, --alignment-only                Only performs the alignment calculation, without prior clustering. 
-                                        NOTE: This is not recommended for large datasets. [Default: False]
-  -c, --cluster-only                  Only performs the clustering step of sequences, without the alignment. [Default: False]
+  -a, --alignment-only                    Only performs the alignment calculation, without prior clustering. 
+                                            NOTE: This is not recommended for large datasets. [Default: False]
+  -c, --cluster-only                        Only performs the clustering step of sequences, without the alignment. [Default: False]
+
+  -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the LocARNA refinement. [Default: 250]
+  -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 20]
   
 
 Version:
@@ -111,6 +114,7 @@ def create_logger():
 def create_outdir(outdir):
     try:
       os.makedirs(outdir)
+      os.makedirs(f"{outdir}/tmpSequences")
       logger.info(f"Creating output directory: {outdir}")
     except FileExistsError:
       logger.warning(f"The output directory exists. Files will be overwritten.")
@@ -165,13 +169,25 @@ def parse_arguments(d_args):
   if not (0 <= cutoff <= 1):
     logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
     exit(2)
+  
+  try:
+    windowSize = int(d_args['--windowsize'])
+  except ValueError:
+    logger.error("Invalid parameter for the window size. Please input a number.")
+    sys.exit(2)
     
+  try:
+    stepSize = int(d_args['--stepsize'])
+  except ValueError:
+    logger.error("Invalid parameter for the sliding window step size. Please input a number.")
+    sys.exit(2)
+
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
   now = str(datetime.now()).split('.')[0].replace(' ','_').replace(':','-')
   #output = f"{output}/vegeta-{now}"
-  output = f"{output}/vegeta"
+  output = f"{output}/vegeta/"
   create_outdir(output)
 
 
@@ -179,7 +195,7 @@ def parse_arguments(d_args):
   clusterOnly = d_args['--cluster-only']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize)
 
 def perform_clustering():
 
@@ -209,7 +225,7 @@ def perform_alignment(seq=None):
         outputStream.write("".join(inputStream.readlines()))
 
   
-  virusAligner = Aligner(logger, clusteredSequences, k, proc)
+  virusAligner = Aligner(logger, clusteredSequences, k, proc, windowSize, stepSize, outdir)
   
 
   logger.info("Calculating initial mafft alignment")
@@ -222,7 +238,7 @@ def perform_alignment(seq=None):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")

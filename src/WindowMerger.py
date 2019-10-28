@@ -16,14 +16,14 @@ class WindowMerger(object):
     1) Majority Vote of columns. If two nucleotides are pairing in every window, it is a pretty strong hint.
     Medium - Hard:
     2) Energy shift: If a nucleotide has different bp partner in different windows, RNAsubopt might help out
-       Trying to evaluate how much energy has to be put into the different structures. Minimize energy this way
+        Trying to evaluate how much energy has to be put into the different structures. Minimize energy this way
     Hard:
     3) If nucleotides are different for the same column in different windows (lets make it easy and this column only
-       has one bp partner). Then, the context of the sequence between the two bp columns and the compensatory score
-       may decide which one to trust
+        has one bp partner). Then, the context of the sequence between the two bp columns and the compensatory score
+        may decide which one to trust
     Very Hard:
     4) Nucleotides are different in a column that also has different bp partners in different columns.
-       In that case, I will simply quit my PhD and become a carpenter!
+        In that case, I will simply quit my PhD and become a carpenter!
     """
 
     def __init__(self, allWindows, stepSize, windowSize, sequences):
