@@ -423,7 +423,7 @@ class Aligner(object):
         locarna_windows = self.read_locarna_alignments()
         windowMerger = WindowMerger(locarna_windows, self.stepSize, self.windowSize, sequences)
         
-        #mergedAlignment = windowMerger.merge_windows2()
+        windowMerger.merge_windows()
         mergedAlignment = windowMerger.mergedAlignment
         #structureAlignment = format_alignment(mergedAlignment, sequences)
         structureAlignment = mergedAlignment
