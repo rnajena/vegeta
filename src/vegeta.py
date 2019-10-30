@@ -48,6 +48,10 @@ Options:
                                             NOTE: This is not recommended for large datasets. [Default: False]
   -c, --cluster-only                        Only performs the clustering step of sequences, without the alignment. [Default: False]
 
+  --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
+                                          a seed region in the sequence-based scaffold alignment. [Default: 10]
+  --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
+                                          If none (-1.0) is set, VeGETA takes the best 5% windows as seeds. [Default: -1.0]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the LocARNA refinement. [Default: 250]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 20]
   
@@ -182,6 +186,18 @@ def parse_arguments(d_args):
     logger.error("Invalid parameter for the sliding window step size. Please input a number.")
     sys.exit(2)
 
+  try:
+    seedSize = int(d_args['--seedsize'])
+  except ValueError:
+    logger.error("Invalid parameter for the seed size. Please input a number.")
+    sys.exit(2)
+
+  try:
+    shannon = float(d_args['--shannon'])
+  except ValueError:
+    logger.error("Invalid number for the shannon entropy cutoff threshold. Please input a number higher than 0.0.")
+    exit(2)
+
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
@@ -195,7 +211,7 @@ def parse_arguments(d_args):
   clusterOnly = d_args['--cluster-only']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon)
 
 def perform_clustering():
 
@@ -224,21 +240,25 @@ def perform_alignment(seq=None):
       with open(goi, 'r') as inputStream:
         outputStream.write("".join(inputStream.readlines()))
 
-  
-  virusAligner = Aligner(logger, clusteredSequences, k, proc, windowSize, stepSize, outdir)
-  
-
   logger.info("Calculating initial mafft alignment")
-  virusAligner.calculate_pw_distances()
-  virusAligner.get_tree_from_dist()
-  treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
-  Phylo.write(virusAligner.tree, treePath, 'newick')
-  virusAligner.refine_pairwise_instances(virusAligner.tree, None)
+  virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
+  virusAligner.mafft_scaffold()
+  logger.info("Finding conserved seeds in the alignment")
+  virusAligner.find_seeds_in_scaffold()
+
+
+
+  
+  #virusAligner.calculate_pw_distances()
+  #virusAligner.get_tree_from_dist()
+  #treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
+  #Phylo.write(virusAligner.tree, treePath, 'newick')
+  #virusAligner.refine_pairwise_instances(virusAligner.tree, None)
   
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
