@@ -245,6 +245,9 @@ def perform_alignment(seq=None):
   virusAligner.mafft_scaffold()
   logger.info("Finding conserved seeds in the alignment")
   virusAligner.find_seeds_in_scaffold()
+  logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
+  logger.info("Extracting sequences between seeds")
+  virusAligner.extract_non_seeds()
 
 
 
