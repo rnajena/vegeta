@@ -28,9 +28,6 @@ class Aligner(object):
     self.seeds = {}
     self.nonSeeds = {}
     
-
-
-
   def __getstate__(self):
     self_dict = self.__dict__.copy()
     del self_dict['pool']
@@ -63,7 +60,7 @@ class Aligner(object):
       holyEntropies.update({start : np.average(entropies)})
 
     if self.shannon == -1:
-      self.shannon = np.percentile(list(holyEntropies.values()), 5)
+      self.shannon = np.percentile(list(holyEntropies.values()), 10)
     seedCandidates = {k : v for k,v in holyEntropies.items() if v < self.shannon}
 
     prevSeedStart = -1
@@ -89,7 +86,7 @@ class Aligner(object):
 
     for start, stop in self.nonSeeds.items():
       alnFragment = self.alignment[:, start:stop]
-      print(alnFragment)
+      #print(alnFragment)
 
 
   def read_sequences(self):
