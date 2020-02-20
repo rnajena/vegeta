@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# Author: Kevin Lamkiewicz
+# Email: kevin.lamkiewicz@uni-jena.de
+
 """
 VeGETA -- Viral GEnome sTructure Alignments
 
@@ -51,7 +54,7 @@ Options:
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
-                                          If none (-1.0) is set, VeGETA takes the best 5% windows as seeds. [Default: -1.0]
+                                          If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the LocARNA refinement. [Default: 250]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 20]
   
@@ -244,11 +247,12 @@ def perform_alignment(seq=None):
   virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
   virusAligner.mafft_scaffold()
   logger.info("Finding conserved seeds in the alignment")
-  virusAligner.find_seeds_in_scaffold()
+  #virusAligner.find_seeds_in_scaffold()
   logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
   logger.info("Extracting sequences between seeds")
-  virusAligner.extract_non_seeds()
-
+  #virusAligner.extract_non_seeds()
+  #virusAligner.refine_fragments()
+  virusAligner.merge_fragments()
 
 
   

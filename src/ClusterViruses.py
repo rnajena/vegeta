@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# Author: Kevin Lamkiewicz
+# Email: kevin.lamkiewicz@uni-jena.de
+
+"""
+"""
+
 from collections import Counter
 from multiprocessing import Pool
 import multiprocessing as mp
