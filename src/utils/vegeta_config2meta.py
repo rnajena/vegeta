@@ -100,7 +100,7 @@ for row, d_annotation in metaRow.items():
 
       j = len(symbol)
       
-      if nuclCounter in range(start+2, stop-2, len(symbol)+20):
+      if nuclCounter in range(start+2, stop-2, len(symbol)+80):
       #for i in range(idx+2, idx+start-stop-2, j):
         metaAnno[idx:idx+len(symbol)] = symbol
 

@@ -129,7 +129,7 @@ class Clusterer(object):
     return (seq1, seq2, distance)
     #       
 
-  def apply_umap(self):
+  def apply_umap(self, outdir):
     """
     """
     profiles = []
@@ -153,11 +153,13 @@ class Clusterer(object):
     print()
     print()
 
-    for i in set(self.allCluster):
-      print(f"Cluster: {i}")
-      for idx, label in enumerate(self.allCluster):
-        if label == i:
-          print(self.id2header[idx])
+    with open(f'{outdir}/cluster.txt', 'w') as outStream:
+      for i in set(self.allCluster):
+        outStream.write(f"Cluster: {i}")
+        for idx, label in enumerate(self.allCluster):
+          if label == i:
+            outStream.write(f"{self.id2header[idx]}")
+        outStream.write("\n")
 
 
   def get_centroids(self, outdir, proc):

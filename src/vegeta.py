@@ -204,7 +204,7 @@ def perform_clustering():
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
-  virusClusterer.apply_umap()
+  virusClusterer.apply_umap(outdir)
   clusterInfo = virusClusterer.allCluster
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
@@ -231,7 +231,7 @@ def perform_alignment(seq=None):
   logger.info("Calculating initial mafft alignment")
   virusAligner.calculate_pw_distances()
   virusAligner.get_tree_from_dist()
-  treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
+  treePath = f"{os.path.dirname(outdir)}/vegeta_guidetree.nwk"
   Phylo.write(virusAligner.tree, treePath, 'newick')
   virusAligner.refine_pairwise_instances(virusAligner.tree, None)
   

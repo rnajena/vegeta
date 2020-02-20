@@ -236,7 +236,7 @@ class Aligner(object):
                 # self.basePairings[index2 +
                 #                   offset].append(index+offset)
                 basePairings[index2 +
-                              start] = index+start
+                                start] = index+start
         with lock:
             structures.append(StructureWindow(number, basePairings, bpp))
 
@@ -246,10 +246,11 @@ class Aligner(object):
     RNA.cvar.ribo = 1
     RNA.cvar.noLP = 1
 
-    alnLength = len(aln[0])
+    
+    alnLength = len(aln[list(aln.keys())[0]])
     windows = [(0, x) for x in range(self.stepSize, self.windowSize, self.stepSize)] + \
         [(x, min(x+self.windowSize, alnLength))
-          for x in range(0, alnLength, self.stepSize)]
+            for x in range(0, alnLength, self.stepSize)]
 
     #structures = []
 
@@ -259,13 +260,16 @@ class Aligner(object):
     pool = mp.Pool(self.proc, initializer=self.alifold, initargs=(q, lock, structures))
 
     for index, (start, stop) in enumerate(windows):
-        alnFragment = [index, start, stop] + [[x[start:stop] for x in aln]]    
-        q.put(alnFragment)
+        alnFragment = [index, start, stop] + [[aln[x][start:stop] for x in aln]]
+        if any([x for x in alnFragment[-1]]):    
+            q.put(alnFragment)
 
     for _ in range(self.proc):
         q.put(None)
     pool.close()
     pool.join()
+    #print(structures)
+    
     return [x for x in structures]
 
 
@@ -423,22 +427,22 @@ class Aligner(object):
         locarna_windows = self.read_locarna_alignments()
         windowMerger = WindowMerger(locarna_windows, self.stepSize, self.windowSize, sequences)
         
-        windowMerger.merge_windows()
+        windowMerger.merge_windows2()
         mergedAlignment = windowMerger.mergedAlignment
         #structureAlignment = format_alignment(mergedAlignment, sequences)
         structureAlignment = mergedAlignment
         # print([len(v) for k,v in structureAlignment.items()])
         alnLength = len(list(structureAlignment.values())[0])
         #print("Length after merged locarna " + str(alnLength))
-        #print(structureAlignment.values())
+        
         #exit(0)
-
-        localStructures = self.fold_msa_windowed(list(structureAlignment.values()))
+        print("Folding Stuff!")
+        localStructures = self.fold_msa_windowed(structureAlignment)
         finalStructure = self.derive_final_structure(localStructures, alnLength)
         finalMSA = MultipleSeqAlignment([SeqRecord(Seq(sequence, generic_rna), id=recordID) for recordID, sequence in structureAlignment.items()])
         #print(finalMSA)
         #exit(0)
-        os.system(f"rm -r {self.dirName}/final* {self.dirName}/local*")
+        os.system(f"rm -r {self.dirName}/tmpSequences/final* ")
         finalMSA.column_annotations['secondary_structure'] = ''.join(finalStructure)
         
         self.sequences[node.name] = finalMSA
@@ -446,9 +450,9 @@ class Aligner(object):
         for child in node.get_terminals():
             copiedTree.collapse(child)
         
-        outputPath = f"{self.dirName}/{node}_viralign.fasta"
+        outputPath = f"{self.dirName}/{node}_vegeta.fasta"
         AlignIO.write(finalMSA, outputPath, 'fasta')
-        outputPath = f"{self.dirName}/{node}_viralign.stk"
+        outputPath = f"{self.dirName}/{node}_vegeta.stk"
         AlignIO.write(finalMSA, outputPath, 'stockholm')
         #exit(0)
     #exit(0)
@@ -460,9 +464,9 @@ class Aligner(object):
 
     dirName = os.path.dirname(self.inputFile)
     with open(f"{dirName}/initial_mafft.fasta", 'w') as outputStream:
-      cmd = f"mafft --quiet --thread {self.proc} {self.inputFile}"
-      print(cmd)
-      subprocess.run(cmd.split(), stdout=outputStream , check=True)
+        cmd = f"mafft --quiet --thread {self.proc} {self.inputFile}"
+        print(cmd)
+        subprocess.run(cmd.split(), stdout=outputStream , check=True)
     
 ################################################
 
@@ -546,6 +550,7 @@ class WindowMerger(object):
         self.stepSize = stepSize
         self.windowSize = windowSize
         self.sequences = sequences
+        #print(self.sequences.keys())
 
         self.windowList = []
 
@@ -594,6 +599,27 @@ class WindowMerger(object):
                 order[a].append(b)
         return order
 
+    def __get_windows_with_nucleotide(self, nt_idx, seqID):
+        """
+
+        """
+
+        coveringWindows = []
+        alnColumns = []
+
+
+        for window in self.windowList:
+            seqIDX = window.seqOrder.index(seqID)
+           # print(window.nuclColumns)
+            for colIDX, nucleotides in window.nuclColumns.items():
+                if nt_idx == nucleotides[seqIDX]:
+                    coveringWindows.append(window)
+                    alnColumns.append(colIDX)
+                    continue
+            
+        #return(coveringWindows)
+        return(alnColumns)
+
     def convert_windows_to_hashes(self):
 
         gapInSequence = defaultdict(self.__ddi)
@@ -603,6 +629,7 @@ class WindowMerger(object):
             record_nts = defaultdict(list)
             currentWindow = self.allWindows[i]
             if i*self.stepSize >= self.windowSize:
+                #offset = int(self.stepSize * (i+1-self.windowSize/self.stepSize)  - gaps)
                 offset = (i+1)*self.stepSize - self.windowSize - gaps
             else:
                 offset = 0
@@ -613,6 +640,7 @@ class WindowMerger(object):
             # Structure Hash
             for index, column in enumerate(secondary_structure):
                 if column == '.':
+                    # self.basePairings[index+offset].append(-1)
                     basePairings[index+offset] = -1
                     continue
 
@@ -621,19 +649,26 @@ class WindowMerger(object):
 
                 if column == ')':
                     index2 = idx.pop()
-
+                    # self.basePairings[index +
+                    #                   offset].append(index2+offset)
                     basePairings[index +
-                                offset] = index2+offset
+                                    offset] = index2+offset
+                    # self.basePairings[index2 +
+                    #                   offset].append(index+offset)
                     basePairings[index2 +
-                                offset] = index+offset
+                                    offset] = index+offset
 
             # Sequence Hash
             seqOrder = []
             for record in currentWindow:
-                gapless = str(record.seq).replace('-', '')
+                #record_nts = self.col2genomic[record.id]
+                gapless = str(record.seq).replace('-', '').upper().replace('U','T')
                 try:
                     startIndex = self.sequences[record.id].upper().find(gapless)
-
+                    #print(startIndex)
+                    #print(gapless)
+                    #print(self.sequences[record.id].upper())
+                    #print(startIndex)
                 except TypeError:
                     print(record.id)
                     sys.exit(0)
@@ -643,17 +678,101 @@ class WindowMerger(object):
                     if column == '-':
                         record_nts[col_idx+offset].append(-1)
                         gapInSequence[record.id][col_idx +
-                                                startIndex] = gapInSequence[record.id][col_idx+startIndex-1] + 1
+                                                    startIndex] = gapInSequence[record.id][col_idx+startIndex-1] + 1
                     else:
                         gapInSequence[record.id][col_idx +
-                                                startIndex] = gapInSequence[record.id][col_idx+startIndex-1]
+                                                    startIndex] = gapInSequence[record.id][col_idx+startIndex-1]
 
                         record_nts[col_idx+offset].append(
                             col_idx - Counter(record.seq[:col_idx])['-'] + startIndex)
                     self.alnLength = col_idx+offset
 
             colOverview = self.__convert_window_to_columnHash(currentWindow, secondary_structure, offset)
+            # self.windowList.append((SequenceWindow(i, basePairings, seqOrder, record_nts, colOverview)))
+            #print(i, record_nts)
+            #print(colOverview)
+            #print(self.alnLength)
+            #print(i, record_nts)
             self.windowList.append((SequenceWindow(i, seqOrder, record_nts, colOverview)))
+
+
+    def merge_windows2(self):
+        """
+
+        """
+        aln = {}
+        for seqID, sequence in self.sequences.items():
+            lastColumnFilled = -1
+            alnRow = ['-'] * (self.alnLength+2)
+            #print(len(alnRow))
+            #print(seqID)
+            usedNTs = []
+            try:
+                for idx, nt in enumerate(sequence):
+                    windowsWithNT = self.__get_windows_with_nucleotide(idx, seqID)
+                    #print(idx, windowsWithNT)
+                    windowsWithNT = [x for x in windowsWithNT if x > lastColumnFilled and lastColumnFilled + 100 > x and x < len(alnRow)]
+                    #print(windowsWithNT)
+
+                    if not windowsWithNT:
+                        alnCol = lastColumnFilled + 1
+                        if alnCol >= len(alnRow):
+                            raise ValueError(f"Alignment out of bounds\n{idx},{seqID}, {len(sequence)}:\n{self.__get_windows_with_nucleotide(idx, seqID)} -- {lastColumnFilled},{len(alnRow)}\n{windowsWithNT}")
+                            print(seqID, idx, windowsWithNT, alnCol)
+                            #print(alnRow)
+                            exit(1)
+                    else:
+                        alnCol = Counter(windowsWithNT).most_common(1)[0][0]
+                        if alnCol >= len(alnRow):
+                            raise ValueError(f"Alignment out of bounds\n{idx},{seqID}, {len(sequence)}:\n{self.__get_windows_with_nucleotide(idx, seqID)} -- {lastColumnFilled},{len(alnRow)}\n{windowsWithNT}")
+                            print(seqID, idx, windowsWithNT)
+                            exit(1)
+
+                    #print(idx, nt)
+                    #print(self.__get_windows_with_nucleotide(idx, seqID))
+                    #print(windowsWithNT, alnCol)    
+                    #print()
+                    try:
+                        alnRow[alnCol] = nt
+                        lastColumnFilled = alnCol
+                        usedNTs.append(nt)
+                    except IndexError:
+                        print(alnCol, len(alnRow))
+                    #for window in windowsWithNT:
+                    #    print(window.nuclColumns)
+            except ValueError as err:
+                print(f"Value Error: {err}")
+                exit(1)
+
+            #print(seqID, len(usedNTs), len(set(usedNTs)), len(sequence))
+            #print(set(usedNTs))
+            assert(len(usedNTs) == len(sequence))
+            assert(''.join(alnRow).replace('-','') == sequence)
+            aln[seqID] = alnRow
+        
+        seqIDs = []
+        alnRows = []
+        for x, y in aln.items():
+            seqIDs.append(x)
+            alnRows.append(y)
+        
+        toRemove = []
+        for idx in range(len(alnRows[0])):
+            try:
+                if all([row[idx] == '-' for row in alnRows]):
+                    toRemove.append(idx)
+            except IndexError:
+                print(idx, [len(x) for x in alnRows])
+        
+        #print(toRemove)
+        for index in sorted(toRemove, reverse=True):
+            for row in alnRows:
+                del row[index]
+        
+        aln = {k : ''.join(v) for k,v in zip(seqIDs, alnRows)}
+
+        self.mergedAlignment = aln
+        #return(aln)
 
 
     def merge_windows(self):
@@ -670,10 +789,198 @@ class WindowMerger(object):
             
             order = self.__convert_order_info(colSeqOrder, colNucleotides)
             for recordID, genomicPositions in order.items():
-                if usedPositions[recordID] + 1 in genomicPositions:# and not majorityGap:
+                countedPositions = Counter(genomicPositions).most_common()
+                highestOccurence = countedPositions[0][1]
+
+                allHighOccurence = [x[0] for x in countedPositions if x[1] == highestOccurence]
+
+                majorityGap = -1 in allHighOccurence
+
+                noGapsList = [x for x in genomicPositions if x != -1]
+                if noGapsList:
+                    lastChance = min(noGapsList) == usedPositions[recordID] + 1 and len(set(noGapsList)) > 1
+                else:
+                    lastChance = False
+                #ntIsMostCommon = sorted(countedPositions, key = lambda x:(x[1], x[0]), reverse=True)
+                #ntIsMostCommon = usedPositions[recordID] + 1 in allHighOccurence
+                ntIsMostCommon = genomicPositions.count(usedPositions[recordID] + 1) > 1
+
+                print()
+                print(recordID)
+                print(col_idx)
+                print(usedPositions)
+                print(genomicPositions)
+                print(sorted(Counter(genomicPositions).most_common(), key = lambda x:(x[1], x[0]), reverse=True)[0][0])
+                print(noGapsList)
+                print(lastChance)
+
+                if lastChance or (ntIsMostCommon and not majorityGap):
+                    print("Found it")
                     position = usedPositions[recordID]+1
                     usedPositions[recordID] = usedPositions[recordID]+1
                 else:
                     position = -1
+                print()
 
                 self.mergedAlignment[col_idx][recordID] = position
+        print(len(self.mergedAlignment))
+
+# class WindowMerger(object):
+#     """
+#     ToDos for window merging:
+#     Easy:
+#     1) Majority Vote of columns. If two nucleotides are pairing in every window, it is a pretty strong hint.
+#     Medium - Hard:
+#     2) Energy shift: If a nucleotide has different bp partner in different windows, RNAsubopt might help out
+#         Trying to evaluate how much energy has to be put into the different structures. Minimize energy this way
+#     Hard:
+#     3) If nucleotides are different for the same column in different windows (lets make it easy and this column only
+#         has one bp partner). Then, the context of the sequence between the two bp columns and the compensatory score
+#         may decide which one to trust
+#     Very Hard:
+#     4) Nucleotides are different in a column that also has different bp partners in different columns.
+#         In that case, I will simply quit my PhD and become a carpenter!
+#     """
+
+#     def __init__(self, allWindows, stepSize, windowSize, sequences):
+#         """
+
+#         """
+
+#         self.mergedAlignment = defaultdict(self.__ddl)
+
+#         self.allWindows = allWindows
+#         self.stepSize = stepSize
+#         self.windowSize = windowSize
+#         self.sequences = sequences
+
+#         self.windowList = []
+
+#         #self.col2genomic = defaultdict(self.ddl)
+#         #self.basePairings = defaultdict(list)
+
+#         self.alnLength = 0
+#         self.convert_windows_to_hashes()
+        
+#     def __ddl(self):
+#         return defaultdict(list)
+
+#     def __ddi(self):
+#         return defaultdict(int)
+
+#     def __convert_window_to_columnHash(self, window, struc, offset):
+#         """
+
+#         """
+#         windowHash = defaultdict(dict)
+#         if not window or not struc:
+#             return windowHash
+
+#         alnLength = window.get_alignment_length()
+#         seqOrder = [x.id for x in window]
+
+#         for i in range(alnLength):
+#             column = window[:, i]
+#             for seqID, nt in (zip(seqOrder, column)):
+#                 windowHash[i+offset].update({seqID: nt})
+#             windowHash[i+offset].update({'struc': struc[i]})
+#             windowHash[i+offset].update({'column': column})
+#         return(windowHash)
+
+#     def __get_windows_with_col(self, col_idx):
+#         """
+
+#         """
+
+#         return [window for window in self.windowList if col_idx in window.get_range()]
+
+#     def __convert_order_info(self, colSeqOrder, colNucleotides):
+#         order = defaultdict(list)
+#         for x, y in zip(colSeqOrder, colNucleotides):
+#             for a, b in zip(x, y):
+#                 order[a].append(b)
+#         return order
+
+#     def convert_windows_to_hashes(self):
+
+#         gapInSequence = defaultdict(self.__ddi)
+#         gaps = 0
+#         for i in range(0, len(self.allWindows.keys())):
+#             basePairings = {}
+#             record_nts = defaultdict(list)
+#             currentWindow = self.allWindows[i]
+#             if i*self.stepSize >= self.windowSize:
+#                 offset = (i+1)*self.stepSize - self.windowSize - gaps
+#             else:
+#                 offset = 0
+        
+#             secondary_structure = currentWindow.column_annotations['secondary_structure']
+#             idx = []
+
+#             # Structure Hash
+#             for index, column in enumerate(secondary_structure):
+#                 if column == '.':
+#                     basePairings[index+offset] = -1
+#                     continue
+
+#                 if column == '(':
+#                     idx.append(index)
+
+#                 if column == ')':
+#                     index2 = idx.pop()
+
+#                     basePairings[index +
+#                                 offset] = index2+offset
+#                     basePairings[index2 +
+#                                 offset] = index+offset
+
+#             # Sequence Hash
+#             seqOrder = []
+#             for record in currentWindow:
+#                 gapless = str(record.seq).replace('-', '')
+#                 try:
+#                     startIndex = self.sequences[record.id].upper().find(gapless)
+
+#                 except TypeError:
+#                     print(record.id)
+#                     sys.exit(0)
+                
+#                 seqOrder.append(record.id)
+#                 for col_idx, column in enumerate(record.seq):
+#                     if column == '-':
+#                         record_nts[col_idx+offset].append(-1)
+#                         gapInSequence[record.id][col_idx +
+#                                                 startIndex] = gapInSequence[record.id][col_idx+startIndex-1] + 1
+#                     else:
+#                         gapInSequence[record.id][col_idx +
+#                                                 startIndex] = gapInSequence[record.id][col_idx+startIndex-1]
+
+#                         record_nts[col_idx+offset].append(
+#                             col_idx - Counter(record.seq[:col_idx])['-'] + startIndex)
+#                     self.alnLength = col_idx+offset
+
+#             colOverview = self.__convert_window_to_columnHash(currentWindow, secondary_structure, offset)
+#             self.windowList.append((SequenceWindow(i, seqOrder, record_nts, colOverview)))
+
+
+#     def merge_windows(self):
+#         """
+
+#         """
+        
+#         usedPositions = {x: -1 for x in self.sequences.keys()}
+#         for col_idx in range(self.alnLength+1):
+#             windowInfo = self.__get_windows_with_col(col_idx)
+
+#             colNucleotides = [x.nuclColumns[col_idx] for x in windowInfo]
+#             colSeqOrder = [x.seqOrder for x in windowInfo]
+            
+#             order = self.__convert_order_info(colSeqOrder, colNucleotides)
+#             for recordID, genomicPositions in order.items():
+#                 if usedPositions[recordID] + 1 in genomicPositions:# and not majorityGap:
+#                     position = usedPositions[recordID]+1
+#                     usedPositions[recordID] = usedPositions[recordID]+1
+#                 else:
+#                     position = -1
+
+#                 self.mergedAlignment[col_idx][recordID] = position
