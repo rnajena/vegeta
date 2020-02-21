@@ -55,8 +55,8 @@ Options:
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
                                           If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
-  -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the LocARNA refinement. [Default: 250]
-  -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 20]
+  -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
+  -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
   
 
 Version:
@@ -92,6 +92,7 @@ warnings.warn = warn
 
 from ClusterViruses import Clusterer
 from AlignViruses import Aligner
+from StructureViruses import StructCalculator
 
 def create_logger():
     """
@@ -247,15 +248,39 @@ def perform_alignment(seq=None):
   virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
   virusAligner.mafft_scaffold()
   logger.info("Finding conserved seeds in the alignment")
-  #virusAligner.find_seeds_in_scaffold()
+  virusAligner.find_seeds_in_scaffold()
   logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
   logger.info("Extracting sequences between seeds")
   #virusAligner.extract_non_seeds()
+  logger.info("Applying LocARNA on fragments")
   #virusAligner.refine_fragments()
+  logger.info("Merging all fragments to a whole alignment")
   virusAligner.merge_fragments()
+  logger.info("Refined alignment calculated. Deriving final structure now!")
+  structure = derive_structure()
+  logger.info("Saving the final alignment in STOCKHOLM format")
+  write_final_alignment(virusAligner.refinedAlignment, structure)
 
+def derive_structure():
+  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc)
+  struc.apply_lalifold()
+  logger.info("Non-overlapping structures calculated.")
+  logger.info("Analyzing conflicting structures with base-pairing probabilities.")
+  struc.resolve_conflicts()
+  logger.info("Done with the structure.")
+  return(struc.finalStructure)
 
-  
+def write_final_alignment(alignment, structure):
+  with open(f"{outdir}/finalAlignment.stk",'w') as outputStream:
+    outputStream.write("# STOCKHOLM 1.0\n")
+    outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.1\n")
+    outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
+    
+    for header, sequence in alignment.items():
+      outputStream.write(f"{header}\t\t{sequence}\n")
+    outputStream.write(f"#=GC SS_cons\t\t{structure}\n")
+
   #virusAligner.calculate_pw_distances()
   #virusAligner.get_tree_from_dist()
   #treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"

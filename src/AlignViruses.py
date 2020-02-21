@@ -13,6 +13,7 @@ import subprocess
 import math
 from collections import Counter
 import glob
+import itertools
 
 import numpy as np
 from Bio import AlignIO
@@ -34,6 +35,8 @@ class Aligner(object):
     self.alignment = ""
     self.seeds = {}
     self.nonSeeds = {}
+
+    self.refinedAlignment = ''
     
   def __getstate__(self):
     self_dict = self.__dict__.copy()
@@ -100,7 +103,7 @@ class Aligner(object):
     self.nonSeeds = {}
     for idx, start in enumerate(sorted(list(self.seeds))):
       stop = self.seeds[start]
-      self.nonSeeds[idx] = (start-1, stop)
+      self.nonSeeds[idx] = (nonSeedStart, start-1)
       nonSeedStart = stop+1
     self.nonSeeds[idx+1] = (nonSeedStart, self.alignment.get_alignment_length())
 
@@ -108,7 +111,7 @@ class Aligner(object):
     """
     """
     for idx, (start, stop) in self.nonSeeds.items():
-      alnFragment = self.alignment[:, start:stop]
+      alnFragment = self.alignment[:, start:stop+1]
       with open(f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta", 'w') as outputStream:
         for record in alnFragment:
           outputStream.write(f">{record.id}\n{str(record.seq).replace('-','')}\n")
@@ -120,17 +123,43 @@ class Aligner(object):
     """
     for idx in self.nonSeeds:
       file = f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta"
-      start, stop = self.nonSeeds[idx] 
-      if stop - start <= 300:
-        cmd = f"mlocarna --quiet --stockholm -s 400 --threads {self.proc} {file}"
-        subprocess.run(cmd.split(), check=True)
+      #start, stop = self.nonSeeds[idx] 
+      #if stop - start <= 300:
+      cmd = f"mlocarna --quiet --stockholm -s 400 --threads {self.proc} {file}"
+      subprocess.run(cmd.split(), check=True)
 
   def merge_fragments(self):
     """
     """
-    finalAlignment = {record.id : "" for record in self.alignment}
-    print(finalAlignment)
+    flexible = [(k,*v) for k,v in self.nonSeeds.items()]
+    static = [(k,v) for k,v in self.seeds.items()]
+    
+    #itertools.zip_longest()
 
+    if self.nonSeeds[0][0] == 0:
+      order = itertools.zip_longest(flexible, static)
+    else:
+      order = itertools.zip_longest(static, flexible)
+    
+    
+    finalAlignment = {record.id : "" for record in self.alignment}
+    for fragment in order:
+      for element in fragment:
+        if not element:
+          continue
+        if len(element) == 3:
+          alnFrag = AlignIO.read(f"{self.outdir}/tmpSequences/diverseFragment_{element[0]}.out/results/result.stk", 'stockholm')    
+          for record in alnFrag:
+            finalAlignment[record.id] += str(record.seq).upper().replace('U','T')
+        elif len(element) == 2:
+          for record in self.alignment:
+            finalAlignment[record.id] += str(record.seq)[element[0]:element[1]+1].upper().replace('U','T')
+    
+    self.refinedAlignment = finalAlignment
+    
+    with open(f"{self.outdir}/refinedAlignment.aln", 'w') as outputStream:
+      for header, sequence in self.refinedAlignment.items():
+        outputStream.write(f">{header}\n{sequence}\n")
 
   def read_sequences(self):
     """
