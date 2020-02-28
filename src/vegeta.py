@@ -251,9 +251,9 @@ def perform_alignment(seq=None):
   virusAligner.find_seeds_in_scaffold()
   logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
   logger.info("Extracting sequences between seeds")
-  #virusAligner.extract_non_seeds()
+  virusAligner.extract_non_seeds()
   logger.info("Applying LocARNA on fragments")
-  #virusAligner.refine_fragments()
+  #virusAligner.refine_fragments(windowSize, stepSize)
   logger.info("Merging all fragments to a whole alignment")
   virusAligner.merge_fragments()
   logger.info("Refined alignment calculated. Deriving final structure now!")
@@ -263,11 +263,15 @@ def perform_alignment(seq=None):
 
 def derive_structure():
   struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc)
-  struc.apply_lalifold()
-  logger.info("Non-overlapping structures calculated.")
-  logger.info("Analyzing conflicting structures with base-pairing probabilities.")
-  struc.resolve_conflicts()
-  logger.info("Done with the structure.")
+  #struc.apply_alifold()
+  struc.calculate_avg_bpp()
+  struc.generate_ilp()
+  struc.finalize_structure()
+  #struc.apply_lalifold()
+  #logger.info("Non-overlapping structures calculated.")
+  #logger.info("Analyzing conflicting structures with base-pairing probabilities.")
+  #struc.resolve_conflicts()
+  #logger.info("Done with the structure.")
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure):

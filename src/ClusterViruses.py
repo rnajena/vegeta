@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Author: Kevin Lamkiewicz
-# Email: kevin.lamkiewicz@uni-jena.de
-
-"""
-"""
-
 from collections import Counter
 from multiprocessing import Pool
 import multiprocessing as mp
@@ -135,7 +129,7 @@ class Clusterer(object):
     return (seq1, seq2, distance)
     #       
 
-  def apply_umap(self):
+  def apply_umap(self, outdir):
     """
     """
     profiles = []
@@ -159,11 +153,13 @@ class Clusterer(object):
     print()
     print()
 
-    for i in set(self.allCluster):
-      print(f"Cluster: {i}")
-      for idx, label in enumerate(self.allCluster):
-        if label == i:
-          print(self.id2header[idx])
+    with open(f'{outdir}/cluster.txt', 'w') as outStream:
+      for i in set(self.allCluster):
+        outStream.write(f"Cluster: {i}")
+        for idx, label in enumerate(self.allCluster):
+          if label == i:
+            outStream.write(f"{self.id2header[idx]}")
+        outStream.write("\n")
 
 
   def get_centroids(self, outdir, proc):
@@ -220,71 +216,12 @@ class Clusterer(object):
     p.close()
     p.join()
 
-    #with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
-    #  for centroid in centroids:
-    #    outStream.write(f">{self.id2header[centroid]}\n{self.d_sequences[centroid]}\n")
-
-  # def centroid_from_cluster(self, d_cluster):
-  #   """
-  #   """
-  #   cluster, sequences = d_cluster
-
-  #   if cluster == -1:
-  #       return
-
-  #   subProfiles = {seq : profile for seq, profile in self.d_profiles.items() if seq in sequences}
-    
-  #   for seq1, seq2 in itertools.combinations(subProfiles, 2):
-  #     dist = self.calc_pd((seq1, seq2, subProfiles))
-  #     self.matrix[seq1][seq2] = dist
-  #     self.matrix[seq2][seq1] = dist
-      
-  #   tmpMinimum = math.inf
-  #   centroidOfCluster = -1
-
-  #   if len(sequences) == 1:
-  #     centroidOfCluster = cluster[0]
-  #     return centroidOfCluster
-    
-  #   for sequence in sequences:
-  #     averagedDistance = 0
-
-  #     for neighborSequence in sequences:
-  #       if sequence == neighborSequence:
-  #         continue
-
-  #       averagedDistance += self.matrix[sequence][neighborSequence]
-  #     averagedDistance /= len(sequences)-1
-
-  #     if averagedDistance < tmpMinimum:
-  #       tmpMinimum = averagedDistance
-  #       centroidOfCluster = sequence
-
-  #   return centroidOfCluster
 
   def split_centroids(self, outdir):
     """
     """
-    #print(self.centroids)
-    #centroidStrands = {centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids}
     centroids = { centroid : self.d_sequences[centroid].split("X"*10)[0] for centroid in self.centroids }
 
     with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
       for centroidID, sequence in centroids.items():
         outStream.write(f">{self.id2header[centroidID]}\n{sequence}\n")
-    #for centroidID, strands in centroidStrands.items():
-      #for strand in strands:
-       # matches = self.regex_orf.findall(strand)
-      #matches = [self.regex_orf.findall(strand) for strand in strands]
-        
-        #print(centroidID, len(matches))
-        #allORFs = "".join([x[0] for x in matches if x])
-        #print(len(allORFs)/len(strand))
-        
-        
-        
-      
-      
-      #print(f"Start Codon {[x.count('ATG') for x in strands]}")
-      #print(f"Stop Codon {[len(self.regex_stop.findall(strand)) for strand in strands]}")
-    #print(centroidStrands)

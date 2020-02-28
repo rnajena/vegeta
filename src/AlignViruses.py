@@ -18,6 +18,8 @@ import itertools
 import numpy as np
 from Bio import AlignIO
 
+from StructureViruses import StructCalculator
+
 class Aligner(object):
   """
   """
@@ -118,15 +120,29 @@ class Aligner(object):
       
       
       
-  def refine_fragments(self):
+  def refine_fragments(self, windowSize, stepSize):
     """
     """
     for idx in self.nonSeeds:
       file = f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta"
-      #start, stop = self.nonSeeds[idx] 
-      #if stop - start <= 300:
-      cmd = f"mlocarna --quiet --stockholm -s 400 --threads {self.proc} {file}"
-      subprocess.run(cmd.split(), check=True)
+      start, stop = self.nonSeeds[idx]
+      if all( [ len(str(x.seq).replace('-','')) <= 300 for x in self.alignment[:, start:stop] ] ):
+        cmd = f"mlocarna --quiet --stockholm -s 400 --threads {self.proc} {file}"
+        subprocess.run(cmd.split(), check=True)
+      else:
+        cmd = f"mafft --clustalout --quiet --thread {self.proc} {file}"
+        bn = os.path.splitext(os.path.basename(file))[0]
+        try:
+          os.makedirs(f"{self.outdir}/tmpSequences/{bn}.out/results/")
+        except FileExistsError:
+          self.logger.warning(f"{self.outdir}/tmpSequences/{bn}.out exists! Will overwrite content.")
+        with open(f"{self.outdir}/tmpSequences/{bn}.out/results/result.aln", 'w') as outputStream:
+          subprocess.run(cmd.split(), check=True, stdout=outputStream)
+        #localStructure = StructCalculator(f"{file}.aln" ,self.logger, self.outdir, windowSize, stepSize, self.proc)
+        #localStructure.apply_lalifold()
+        #print(len(localStructure.nonOverlap), len(localStructure.overlappingStructures))
+        #print(file)
+        #exit(0)
 
   def merge_fragments(self):
     """
@@ -148,7 +164,7 @@ class Aligner(object):
         if not element:
           continue
         if len(element) == 3:
-          alnFrag = AlignIO.read(f"{self.outdir}/tmpSequences/diverseFragment_{element[0]}.out/results/result.stk", 'stockholm')    
+          alnFrag = AlignIO.read(f"{self.outdir}/tmpSequences/diverseFragment_{element[0]}.out/results/result.aln", 'clustal')    
           for record in alnFrag:
             finalAlignment[record.id] += str(record.seq).upper().replace('U','T')
         elif len(element) == 2:
