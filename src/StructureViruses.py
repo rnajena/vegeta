@@ -23,13 +23,14 @@ class StructCalculator(object):
   """
   """
 
-  def __init__(self, path, logger, outdir, windowSize, stepSize, proc):
+  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP):
     """
     """
 
     self.logger = logger
     self.outdir = outdir
-    self.windowSize = windowSize 
+    self.windowSize = windowSize
+    self.allowLP = allowLP
     self.stepSize = stepSize
     self.proc = proc
     self.path = path
@@ -94,7 +95,7 @@ class StructCalculator(object):
           stop = int(line[4]) + currentWindow[0]
           bpp = math.pow(float(line[5]), 2)
 
-          if bpp >= 0.5:
+          if bpp >= 0.7:
             self.__update_bpps(start, stop, bpp)
             self.__update_bpps(stop, start, bpp)
 
@@ -121,7 +122,17 @@ class StructCalculator(object):
   def finalize_structure(self):
     """
     """
+    allStarts = [x[0] for x in self.used_basepairs]
+    allStops = [x[1] for x in self.used_basepairs]
+
     for start, stop in self.used_basepairs:
+      if not self.allowLP:
+        startRange = [start-1, start+1]
+        stopRange = [stop-1, stop+1]
+        if not (any([x in allStarts for x in startRange]) or any([x in allStops for x in stopRange])):
+          if stop-start >= 4:
+            continue
+
       self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
     
     #print(self.used_basepairs)
@@ -226,7 +237,7 @@ class ILP(object):
   def solve_ilp(self):
     """
     """
-    cmd = f"glpsol --lp {self.outdir}/tmpSequences/structure.ilp --mipgap 0.01 --memlim 16834 --tmlim 14400 -o  {self.outdir}/tmpSequences/structure.ilp.sol"
+    cmd = f"glpsol --lp {self.outdir}/tmpSequences/structure.ilp --mipgap 0.01 --pcost --cuts --memlim 16834 --tmlim 14400 -o  {self.outdir}/tmpSequences/structure.ilp.sol"
     subprocess.run(cmd.split(), check=True)
 
   def extract_used_basepairs(self):

@@ -57,6 +57,8 @@ Options:
                                           If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
+  --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
+                                          into the final structure. [Default: False]
   
 
 Version:
@@ -213,9 +215,10 @@ def parse_arguments(d_args):
 
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
+  allowLP = d_args['--allowLP']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP)
 
 def perform_clustering():
 
@@ -264,7 +267,7 @@ def perform_alignment(seq=None):
   write_final_alignment(virusAligner.refinedAlignment, structure)
 
 def derive_structure():
-  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc)
+  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
   #struc.apply_alifold()
   struc.calculate_avg_bpp()
   struc.generate_ilp()
@@ -296,7 +299,7 @@ def write_final_alignment(alignment, structure):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
