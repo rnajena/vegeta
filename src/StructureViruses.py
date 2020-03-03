@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Author: Kevin Lamkiewicz
@@ -95,7 +96,7 @@ class StructCalculator(object):
 
           if bpp >= 0.5:
             self.__update_bpps(start, stop, bpp)
-            #self.__update_bpps(stop, start, bpp)
+            self.__update_bpps(stop, start, bpp)
 
     for start, values in self.bpps.items():
       for stop, probabilites in values.items():
@@ -143,11 +144,29 @@ class ILP(object):
   def generate_ilp(self):
     """
     """
+
+    trivialCases = {}
+    bpp_iterator = sorted(list(self.bpp_dict))
+    for idx, start in enumerate(bpp_iterator):
+      values = self.bpp_dict[start]
+      if len(values) == 1:
+        interactionPartner = list(values.keys())[0]
+        if len(self.bpp_dict[interactionPartner]) == 1:
+          posBetween = [x for x in range(start+1, interactionPartner) if x in self.bpp_dict]
+          if not any([ y < start or y > interactionPartner for x in posBetween for y in self.bpp_dict[x].keys()]):
+            trivialCases[start] = interactionPartner
+            trivialCases[interactionPartner] = start
+            if start < interactionPartner:
+              self.used_basepairs.append((start, interactionPartner))
+    
+    filteredBPPs = {pos : values for pos, values in self.bpp_dict.items() if pos not in trivialCases}
+    bpp_iterator = sorted(list(filteredBPPs))
+
     with open(f"{self.outdir}/tmpSequences/structure.ilp", 'w') as outputStream:
       outputStream.write("Maximize\n")
       outputStream.write("obj: ")
       edges = []
-      bpp_iterator = sorted(list(self.bpp_dict))
+      #bpp_iterator = sorted(list(self.bpp_dict))
       for start in bpp_iterator:
         values = self.bpp_dict[start]
         for stop, probability in values.items():
@@ -158,10 +177,24 @@ class ILP(object):
       
       outputStream.write("\nSubject To\n")
       variableCounter = 1
-      bpp_iterator = sorted(list(self.bpp_dict))
+      #bpp_iterator = sorted(list(self.bpp_dict))
       conflictCounter = 0
       for idx, start in enumerate(bpp_iterator):
         values = self.bpp_dict[start]
+        #if len(values) == 1:
+          #interactionPartner = list(values.keys())[0]
+          #if len(self.bpp_dict[interactionPartner]) == 1:
+            #posBetween = [x for x in range(start+1, interactionPartner) if x in self.bpp_dict]
+            #for x in posBetween:
+              #if x in self.bpp_dict:
+              #for y in self.bpp_dict[x].keys():
+                #print(start, x, y, interactionPartner)
+            #if not any([ y < start or y > interactionPartner for x in posBetween for y in self.bpp_dict[x].keys()]):
+              # outputStream.write(f"c{variableCounter}: e_{start}_{interactionPartner} = 1\n")
+              #variableCounter += 1
+              #continue
+              #print(start, interactionPartner)
+          #exit(0)
         if len(values) != 1:
           constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
           outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")

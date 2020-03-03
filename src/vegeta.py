@@ -42,7 +42,7 @@ Options:
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
   --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
                                           neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
@@ -60,7 +60,7 @@ Options:
   
 
 Version:
-  VeGETA v0.1 (alpha)
+  VeGETA v0.2 (alpha)
 """
 
 import sys
@@ -139,7 +139,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.1")
+    print("VeGETA version 0.2")
     exit(0)
 
   
@@ -220,11 +220,13 @@ def parse_arguments(d_args):
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(inputSequences, k, cutoff, proc)
+  virusClusterer = Clusterer(logger, inputSequences, k, cutoff, proc)
+  logger.info("Removing 100% identical sequences.")
+  virusClusterer.remove_redundancy()
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
-  virusClusterer.apply_umap()
+  virusClusterer.apply_umap(outdir)
   clusterInfo = virusClusterer.allCluster
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
