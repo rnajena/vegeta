@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# Author: Kevin Lamkiewicz
+# Email: kevin.lamkiewicz@uni-jena.de
+
 """
 VeGETA -- Viral GEnome sTructure Alignments
 
@@ -39,7 +42,7 @@ Options:
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
   --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
                                           neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
@@ -48,12 +51,18 @@ Options:
                                             NOTE: This is not recommended for large datasets. [Default: False]
   -c, --cluster-only                        Only performs the clustering step of sequences, without the alignment. [Default: False]
 
-  -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the LocARNA refinement. [Default: 250]
-  -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 20]
+  --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
+                                          a seed region in the sequence-based scaffold alignment. [Default: 10]
+  --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
+                                          If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
+  -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
+  -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
+  --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
+                                          into the final structure. [Default: False]
   
 
 Version:
-  VeGETA v0.1 (alpha)
+  VeGETA v0.2 (alpha)
 """
 
 import sys
@@ -85,6 +94,7 @@ warnings.warn = warn
 
 from ClusterViruses import Clusterer
 from AlignViruses import Aligner
+from StructureViruses import StructCalculator
 
 def create_logger():
     """
@@ -131,7 +141,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.1")
+    print("VeGETA version 0.2")
     exit(0)
 
   
@@ -182,6 +192,18 @@ def parse_arguments(d_args):
     logger.error("Invalid parameter for the sliding window step size. Please input a number.")
     sys.exit(2)
 
+  try:
+    seedSize = int(d_args['--seedsize'])
+  except ValueError:
+    logger.error("Invalid parameter for the seed size. Please input a number.")
+    sys.exit(2)
+
+  try:
+    shannon = float(d_args['--shannon'])
+  except ValueError:
+    logger.error("Invalid number for the shannon entropy cutoff threshold. Please input a number higher than 0.0.")
+    exit(2)
+
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
@@ -193,14 +215,17 @@ def parse_arguments(d_args):
 
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
+  allowLP = d_args['--allowLP']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP)
 
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(inputSequences, k, cutoff, proc)
+  virusClusterer = Clusterer(logger, inputSequences, k, cutoff, proc)
+  logger.info("Removing 100% identical sequences.")
+  virusClusterer.remove_redundancy()
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
@@ -224,21 +249,65 @@ def perform_alignment(seq=None):
       with open(goi, 'r') as inputStream:
         outputStream.write("".join(inputStream.readlines()))
 
-  
-  virusAligner = Aligner(logger, clusteredSequences, k, proc, windowSize, stepSize, outdir)
-  
-
   logger.info("Calculating initial mafft alignment")
+<<<<<<< HEAD
   virusAligner.calculate_pw_distances()
   virusAligner.get_tree_from_dist()
   treePath = f"{os.path.dirname(outdir)}/vegeta_guidetree.nwk"
   Phylo.write(virusAligner.tree, treePath, 'newick')
   virusAligner.refine_pairwise_instances(virusAligner.tree, None)
+=======
+  virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
+  virusAligner.mafft_scaffold()
+  logger.info("Finding conserved seeds in the alignment")
+  virusAligner.find_seeds_in_scaffold()
+  logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
+  logger.info("Extracting sequences between seeds")
+  virusAligner.extract_non_seeds()
+  logger.info("Applying LocARNA on fragments")
+  #virusAligner.refine_fragments(windowSize, stepSize)
+  logger.info("Merging all fragments to a whole alignment")
+  virusAligner.merge_fragments()
+  logger.info("Refined alignment calculated. Deriving final structure now!")
+  structure = derive_structure()
+  logger.info("Saving the final alignment in STOCKHOLM format")
+  write_final_alignment(virusAligner.refinedAlignment, structure)
+
+def derive_structure():
+  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
+  #struc.apply_alifold()
+  struc.calculate_avg_bpp()
+  struc.generate_ilp()
+  struc.finalize_structure()
+  #struc.apply_lalifold()
+  #logger.info("Non-overlapping structures calculated.")
+  #logger.info("Analyzing conflicting structures with base-pairing probabilities.")
+  #struc.resolve_conflicts()
+  #logger.info("Done with the structure.")
+  return(struc.finalStructure)
+
+def write_final_alignment(alignment, structure):
+  with open(f"{outdir}/finalAlignment.stk",'w') as outputStream:
+    outputStream.write("# STOCKHOLM 1.0\n")
+    outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.1\n")
+    outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
+    
+    for header, sequence in alignment.items():
+      outputStream.write(f"{header}\t\t{sequence}\n")
+    outputStream.write(f"#=GC SS_cons\t\t{structure}\n")
+
+  #virusAligner.calculate_pw_distances()
+  #virusAligner.get_tree_from_dist()
+  #treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
+  #Phylo.write(virusAligner.tree, treePath, 'newick')
+  #virusAligner.refine_pairwise_instances(virusAligner.tree, None)
+>>>>>>> shapes
   
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, windowSize, stepSize) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
