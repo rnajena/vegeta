@@ -250,13 +250,6 @@ def perform_alignment(seq=None):
         outputStream.write("".join(inputStream.readlines()))
 
   logger.info("Calculating initial mafft alignment")
-<<<<<<< HEAD
-  virusAligner.calculate_pw_distances()
-  virusAligner.get_tree_from_dist()
-  treePath = f"{os.path.dirname(outdir)}/vegeta_guidetree.nwk"
-  Phylo.write(virusAligner.tree, treePath, 'newick')
-  virusAligner.refine_pairwise_instances(virusAligner.tree, None)
-=======
   virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
   virusAligner.mafft_scaffold()
   logger.info("Finding conserved seeds in the alignment")
@@ -265,7 +258,7 @@ def perform_alignment(seq=None):
   logger.info("Extracting sequences between seeds")
   virusAligner.extract_non_seeds()
   logger.info("Applying LocARNA on fragments")
-  #virusAligner.refine_fragments(windowSize, stepSize)
+  virusAligner.refine_fragments(windowSize, stepSize)
   logger.info("Merging all fragments to a whole alignment")
   virusAligner.merge_fragments()
   logger.info("Refined alignment calculated. Deriving final structure now!")
@@ -302,7 +295,6 @@ def write_final_alignment(alignment, structure):
   #treePath = f"{os.path.dirname(outdir)}/test_tree.nwk"
   #Phylo.write(virusAligner.tree, treePath, 'newick')
   #virusAligner.refine_pairwise_instances(virusAligner.tree, None)
->>>>>>> shapes
   
 
 if __name__ == "__main__":
