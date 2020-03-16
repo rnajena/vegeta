@@ -34,27 +34,28 @@ Citation:
   Lamkiewicz, K., et al. (20xx), "Structure-guided multiple sequence alignments of complete viral genomes.", Journal, Issue, Volume.
 
 Usage:
-  vegeta.py [options] <inputSequences> [<genomeOfInterest>]
+  vegeta.py [options] [-a|-c] <inputSequences> [<genomeOfInterest>]
 
 Options:
   -h, --help                              Show this help message and exits.
   -v, --verbose                           Get some extra information from VeGETA during calculation. [Default: False]
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
-
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
-  --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
-                                          neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
 
   -a, --alignment-only                    Only performs the alignment calculation, without prior clustering. 
-                                            NOTE: This is not recommended for large datasets. [Default: False]
-  -c, --cluster-only                        Only performs the clustering step of sequences, without the alignment. [Default: False]
+                                          NOTE: This is not recommended for large datasets. [Default: False]
+  -c, --cluster-only                      Only performs the clustering step of sequences, without the alignment. [Default: False]
 
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
-                                          If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
+                                          If none is set, VeGETA takes the best 10% windows as seeds. [Default: 0.1]
+
+  -t THRESHOLD, --tbpp THRESHOLD          Basepairing-probability threshold for potential nucleotide interactions. 
+                                          if bpp between two nucleotides is smaller than this value, 
+                                          it isn't considered during ILP construction. [Default: 0.7]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
   --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
@@ -172,12 +173,12 @@ def parse_arguments(d_args):
     exit(2)
 
   try:
-    cutoff = float(d_args['--cutoff'])
+    tbpp = float(d_args['--tbpp'])
   except ValueError:
-    logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
+    logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
-  if not (0 <= cutoff <= 1):
-    logger.error("Invalid number for the cutoff threshold. Please input a number between 0 and 1.")
+  if not (0 <= tbpp <= 1):
+    logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
   
   try:
@@ -218,7 +219,7 @@ def parse_arguments(d_args):
   allowLP = d_args['--allowLP']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP)
 
 def perform_clustering():
 
@@ -267,16 +268,16 @@ def perform_alignment(seq=None):
   write_final_alignment(virusAligner.refinedAlignment, structure)
 
 def derive_structure():
-  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
-  #struc.apply_alifold()
+  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp)
+  logger.info("Scanning alignment with a sliding-window approach for secondary structures.")
+  struc.apply_alifold()
   struc.calculate_avg_bpp()
+  logger.info("Generating ILP based on all basepairing probabilities.")
+  logger.info("Solving the ILP may take a while.")
   struc.generate_ilp()
+  logger.info("Deriving structural elements from ILP solution.")
   struc.finalize_structure()
-  #struc.apply_lalifold()
-  #logger.info("Non-overlapping structures calculated.")
-  #logger.info("Analyzing conflicting structures with base-pairing probabilities.")
-  #struc.resolve_conflicts()
-  #logger.info("Done with the structure.")
+  logger.info("Testing individual structural elements for significance (dinucleotide shuffling).")
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure):
@@ -299,7 +300,7 @@ def write_final_alignment(alignment, structure):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, cutoff, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
@@ -311,13 +312,3 @@ if __name__ == "__main__":
     logger.info("Doing both, the clustering and the alignment step.")
     perform_clustering()
     perform_alignment()
-
-
-
-  """
-  Clustering of input sequences done.
-  """
-
-    
-
-    

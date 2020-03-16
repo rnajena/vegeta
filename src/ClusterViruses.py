@@ -262,9 +262,6 @@ class Clusterer(object):
     """
     """
     centroids = { centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids }
-
-     
-
     # with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
     #   for centroidID, sequence in centroids.items():
     #     outStream.write(f">{self.id2header[centroidID]}\n{sequence}\n")

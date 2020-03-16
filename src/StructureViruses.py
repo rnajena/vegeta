@@ -23,10 +23,9 @@ class StructCalculator(object):
   """
   """
 
-  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP):
+  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp):
     """
     """
-
     self.logger = logger
     self.outdir = outdir
     self.windowSize = windowSize
@@ -34,6 +33,7 @@ class StructCalculator(object):
     self.stepSize = stepSize
     self.proc = proc
     self.path = path
+    self.tbpp = tbpp
     self.alignment = self.__read_alignment(path)
     self.alnLength = self.alignment.get_alignment_length()
     self.finalStructure = '.' * self.alnLength
@@ -95,7 +95,7 @@ class StructCalculator(object):
           stop = int(line[4]) + currentWindow[0]
           bpp = math.pow(float(line[5]), 2)
 
-          if bpp >= 0.7:
+          if bpp >= self.tbpp:
             self.__update_bpps(start, stop, bpp)
             self.__update_bpps(stop, start, bpp)
 

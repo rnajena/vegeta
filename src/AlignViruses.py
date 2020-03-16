@@ -73,10 +73,10 @@ class Aligner(object):
         entropies.append(entropy)
       holyEntropies.update({start : np.average(entropies)})
 
-    if self.shannon == -1:
-      cutoff = np.percentile(list(holyEntropies.values()), 10)
-    else:
-      cutoff = self.shannon
+    #if self.shannon == -1:
+    cutoff = np.percentile(list(holyEntropies.values()), self.shannon*100)
+    #else:
+     # cutoff = self.shannon
   
     seedCandidates = {k: k+self.seedSize for k,v in holyEntropies.items() if v < cutoff}
     
@@ -127,7 +127,7 @@ class Aligner(object):
       file = f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta"
       start, stop = self.nonSeeds[idx]
       if all( [ len(str(x.seq).replace('-','')) <= 300 for x in self.alignment[:, start:stop] ] ):
-        cmd = f"mlocarna --quiet --stockholm -s 400 --threads {self.proc} {file}"
+        cmd = f"mlocarna --quiet --stockholm --threads {self.proc} {file}"
         subprocess.run(cmd.split(), check=True)
       else:
         cmd = f"mafft --clustalout --quiet --thread {self.proc} {file}"
