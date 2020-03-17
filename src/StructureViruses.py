@@ -138,6 +138,63 @@ class StructCalculator(object):
     #print(self.used_basepairs)
     print(self.finalStructure)
 
+  def apply_lalifold(self):
+    """
+    """
+
+    cmd = f"RNALalifold --noLP --cfactor 0.6 --nfactor 0.5 -r -L {self.windowSize} {self.path}"
+    lalifoldResult = subprocess.getoutput(cmd)
+    structureWindows = {}
+    windows = lalifoldResult.split("\n")[1:-1]
+    for structure in windows:
+      structure = structure.split()
+      start = int(structure[-3])
+      structureWindows[start] = structure[0]
+
+    #nonOverlap = {}
+    lastStart = -1
+    lastStop = -1
+    
+    print(structureWindows)
+    for start in sorted(list(structureWindows)):
+      if lastStart < start <= lastStop:
+        self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
+      else:
+        self.nonOverlap[start] = start + len(structureWindows[start]) -1
+        lastStart = start
+      lastStop = start + len(structureWindows[start]) -1
+
+    
+    lastStart = -1
+    lastStop = -1
+    sortedStarts = sorted(list(self.nonOverlap))
+    for idx, start in enumerate(sortedStarts):
+      stop = self.nonOverlap[start]
+      if start - 20 < 0:
+        start = 0
+      else:
+        start = start - 20
+      
+      if stop + 20 >= self.alnLength:
+        stop = self.alnLength
+      else:
+        stop = stop + 20
+
+      print(self.alignment[:, start:stop])
+
+
+    
+
+    # for start, stop in self.nonOverlap.items():
+      # if stop == len(structureWindows[start])+start-1:
+        # self.finalStructure = self.finalStructure[:start] + structureWindows[start] + self.finalStructure[stop+1:]
+      # else:
+        # self.overlappingStructures[start] = stop
+    
+    #print(self.nonOverlap)
+    #print(self.overlappingStructures)
+    #self.resolve_conflicts()
+
 class ILP(object):
   """
   """
@@ -260,39 +317,6 @@ class ILP(object):
   #   """
   #   print([len(x) for _,x in self.bpps.items()])
 
-
-  # def apply_lalifold(self):
-  #   """
-  #   """
-
-  #   cmd = f"RNALalifold -L {self.windowSize} {self.path}"
-  #   lalifoldResult = subprocess.getoutput(cmd)
-  #   structureWindows = {}
-  #   windows = lalifoldResult.split("\n")[1:-1]
-  #   for structure in windows:
-  #     structure = structure.split()
-  #     start = int(structure[-3])
-  #     structureWindows[start] = structure[0]
-
-  #   #nonOverlap = {}
-  #   lastStart = -1
-  #   lastStop = -1
-
-  #   for start in sorted(list(structureWindows)):
-  #     if lastStart < start <= lastStop:
-  #       self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
-  #     else:
-  #       self.nonOverlap[start] = start + len(structureWindows[start]) -1
-  #       lastStart = start
-  #     lastStop = start + len(structureWindows[start]) -1
-
-  #   for start, stop in self.nonOverlap.items():
-  #     if stop == len(structureWindows[start])+start-1:
-  #       self.finalStructure = self.finalStructure[:start] + structureWindows[start] + self.finalStructure[stop+1:]
-  #     else:
-  #       self.overlappingStructures[start] = stop
-    
-  #   self.resolve_conflicts()
 
   # def resolve_conflicts(self):
   #   """

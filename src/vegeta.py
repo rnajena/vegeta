@@ -287,8 +287,9 @@ def write_final_alignment(alignment, structure):
     outputStream.write("#=GF BM  VeGETA v. 0.1\n")
     outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
     
-    for header, sequence in alignment.items():
-      outputStream.write(f"{header}\t\t{sequence}\n")
+    for record in alignment:
+    #for header, sequence in alignment.items():
+      outputStream.write(f"{record.id}\t\t{record.seq}\n")
     outputStream.write(f"#=GC SS_cons\t\t{structure}\n")
 
   #virusAligner.calculate_pw_distances()

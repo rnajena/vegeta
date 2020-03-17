@@ -133,15 +133,21 @@ class Aligner(object):
       if all( [ len(str(x.seq).replace('-','')) <= 300 for x in self.alignment[:, start:stop] ] ):
         cmd = f"mlocarna --quiet --stockholm --threads {self.proc} {file}"
         subprocess.run(cmd.split(), check=True)
+
       else:
         cmd = f"mafft --clustalout --quiet --thread {self.proc} {file}"
         bn = os.path.splitext(os.path.basename(file))[0]
+        path = f"{self.outdir}/tmpSequences/{bn}.out/results/result.aln"
         try:
           os.makedirs(f"{self.outdir}/tmpSequences/{bn}.out/results/")
         except FileExistsError:
           self.logger.warning(f"{self.outdir}/tmpSequences/{bn}.out exists! Will overwrite content.")
-        with open(f"{self.outdir}/tmpSequences/{bn}.out/results/result.aln", 'w') as outputStream:
+        with open(path, 'w') as outputStream:
           subprocess.run(cmd.split(), check=True, stdout=outputStream)
+        fragmentStructure = StructCalculator(path, *self.structureParameter)
+        print(idx)
+        fragmentStructure.apply_lalifold()
+        exit(0)
 
   def merge_fragments(self):
     """
