@@ -251,7 +251,7 @@ def perform_alignment(seq=None):
         outputStream.write("".join(inputStream.readlines()))
 
   logger.info("Calculating initial mafft alignment")
-  virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon)
+  virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon, structureParameter)
   virusAligner.mafft_scaffold()
   logger.info("Finding conserved seeds in the alignment")
   virusAligner.find_seeds_in_scaffold()
@@ -301,6 +301,8 @@ def write_final_alignment(alignment, structure):
 if __name__ == "__main__":
   logger = create_logger()
   (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
+
+  structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp)
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")

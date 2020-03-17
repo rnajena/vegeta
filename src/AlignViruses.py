@@ -17,6 +17,10 @@ import itertools
 
 import numpy as np
 from Bio import AlignIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Align import MultipleSeqAlignment
+
 
 from StructureViruses import StructCalculator
 
@@ -24,7 +28,7 @@ class Aligner(object):
   """
   """
 
-  def __init__(self, logger, inputFile, proc, outdir, seedSize, shannon):
+  def __init__(self, logger, inputFile, proc, outdir, seedSize, shannon, structureParameter):
     """
     """
 
@@ -37,8 +41,8 @@ class Aligner(object):
     self.alignment = ""
     self.seeds = {}
     self.nonSeeds = {}
-
-    self.refinedAlignment = ''
+    self.structureParameter = structureParameter 
+    self.refinedAlignment = []
     
   def __getstate__(self):
     self_dict = self.__dict__.copy()
@@ -138,11 +142,6 @@ class Aligner(object):
           self.logger.warning(f"{self.outdir}/tmpSequences/{bn}.out exists! Will overwrite content.")
         with open(f"{self.outdir}/tmpSequences/{bn}.out/results/result.aln", 'w') as outputStream:
           subprocess.run(cmd.split(), check=True, stdout=outputStream)
-        #localStructure = StructCalculator(f"{file}.aln" ,self.logger, self.outdir, windowSize, stepSize, self.proc)
-        #localStructure.apply_lalifold()
-        #print(len(localStructure.nonOverlap), len(localStructure.overlappingStructures))
-        #print(file)
-        #exit(0)
 
   def merge_fragments(self):
     """
@@ -150,8 +149,6 @@ class Aligner(object):
     flexible = [(k,*v) for k,v in self.nonSeeds.items()]
     static = [(k,v) for k,v in self.seeds.items()]
     
-    #itertools.zip_longest()
-
     if self.nonSeeds[0][0] == 0:
       order = itertools.zip_longest(flexible, static)
     else:
@@ -170,12 +167,15 @@ class Aligner(object):
         elif len(element) == 2:
           for record in self.alignment:
             finalAlignment[record.id] += str(record.seq)[element[0]:element[1]+1].upper().replace('U','T')
+
+    for name, sequence in finalAlignment.items():
+      self.refinedAlignment.append(SeqRecord(Seq(sequence), id=name))
+    self.refinedAlignment = MultipleSeqAlignment(self.refinedAlignment)
     
-    self.refinedAlignment = finalAlignment
-    
-    with open(f"{self.outdir}/refinedAlignment.aln", 'w') as outputStream:
-      for header, sequence in self.refinedAlignment.items():
-        outputStream.write(f">{header}\n{sequence}\n")
+    AlignIO.write(self.refinedAlignment, f"{self.outdir}/refinedAlignment.aln", "clustal")
+    #with open(f"{self.outdir}/refinedAlignment.aln", 'w') as outputStream:
+    #  for header, sequence in self.refinedAlignment.items():
+    #    outputStream.write(f">{header}\n{sequence}\n")
 
   def read_sequences(self):
     """

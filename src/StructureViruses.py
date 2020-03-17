@@ -48,7 +48,7 @@ class StructCalculator(object):
     """
     """
 
-    return(AlignIO.read(path, 'fasta'))
+    return(AlignIO.read(path, 'clustal'))
 
   def __create_sliding_window(self):
     """
