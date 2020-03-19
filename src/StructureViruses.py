@@ -230,6 +230,36 @@ class ILP(object):
     filteredBPPs = {pos : values for pos, values in self.bpp_dict.items() if pos not in trivialCases}
     bpp_iterator = sorted(list(filteredBPPs))
 
+
+    connectedComponents = []
+    newComponent = set()
+    
+    while bpp_iterator:
+      left = bpp_iterator[0]
+      rightValues = max(self.bpp_dict[left])
+      inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
+      while inBetween:
+        for x in inBetween:
+          newComponent.add(x)
+          
+        firstElement = inBetween.pop(0)
+        print(inBetween)
+        inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
+        print(inBetween)
+        print()
+      print(newComponent)
+      exit(0)
+      
+      #print(bpp_iterator)
+      bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
+      connectedComponents.append(newComponent)
+      
+      #print(bpp_iterator)
+      newComponent = set()  
+    
+    
+    #print(connectedComponents)
+    exit(0)
     with open(f"{self.outdir}/tmpSequences/structure.ilp", 'w') as outputStream:
       outputStream.write("Maximize\n")
       outputStream.write("obj: ")

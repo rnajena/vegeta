@@ -71,20 +71,20 @@ class Aligner(object):
         gaps = (x for x in range(len(aln)))
         gaplessColumn = [x if x != '-' else gaps.__next__() for x in column]
         
-        freqs = {nt : 0 for nt in "ACGU"}
+        freqs = {nt : 0 for nt in "ACGUN"}
         freqs.update(Counter(gaplessColumn))
         entropy = sum(x*math.log2(x) for x in map(lambda x: x/len(aln), freqs.values()) if x != 0) * -1
         entropies.append(entropy)
       holyEntropies.update({start : np.average(entropies)})
-
+    #print(holyEntropies)
     #if self.shannon == -1:
     cutoff = np.percentile(list(holyEntropies.values()), self.shannon*100)
     #else:
      # cutoff = self.shannon
-  
-    seedCandidates = {k: k+self.seedSize for k,v in holyEntropies.items() if v < cutoff}
+    #print(cutoff)
+    seedCandidates = {k: k+self.seedSize for k,v in holyEntropies.items() if v <= cutoff}
     
-    # print(len(seedCandidates))
+    #print(len(seedCandidates))
     # print(len(self.seeds))
 
     for start, stop in seedCandidates.items():
