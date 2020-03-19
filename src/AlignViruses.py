@@ -145,9 +145,9 @@ class Aligner(object):
         with open(path, 'w') as outputStream:
           subprocess.run(cmd.split(), check=True, stdout=outputStream)
         fragmentStructure = StructCalculator(path, *self.structureParameter)
-        print(idx)
-        fragmentStructure.apply_lalifold()
-        exit(0)
+        #print(idx)
+        #fragmentStructure.apply_lalifold()
+        #exit(0)
 
   def merge_fragments(self):
     """

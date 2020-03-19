@@ -236,6 +236,7 @@ def perform_clustering():
   logger.info("Extracting centroid sequences and writing results to file.\n")
   virusClusterer.get_centroids(outdir, multiPool)
   virusClusterer.split_centroids(outdir)
+  del virusClusterer
 
 def perform_alignment(seq=None):
   if seq:
