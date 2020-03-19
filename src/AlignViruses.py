@@ -144,7 +144,7 @@ class Aligner(object):
           self.logger.warning(f"{self.outdir}/tmpSequences/{bn}.out exists! Will overwrite content.")
         with open(path, 'w') as outputStream:
           subprocess.run(cmd.split(), check=True, stdout=outputStream)
-        fragmentStructure = StructCalculator(path, *self.structureParameter)
+        #fragmentStructure = StructCalculator(path, *self.structureParameter)
         #print(idx)
         #fragmentStructure.apply_lalifold()
         #exit(0)
