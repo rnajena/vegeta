@@ -41,13 +41,16 @@ Options:
   -v, --verbose                           Get some extra information from VeGETA during calculation. [Default: False]
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
+
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
+  --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
+                                          neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
 
   -a, --alignment-only                    Only performs the alignment calculation, without prior clustering. 
                                           NOTE: This is not recommended for large datasets. [Default: False]
   -c, --cluster-only                      Only performs the clustering step of sequences, without the alignment. [Default: False]
 
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
@@ -269,9 +272,8 @@ def perform_alignment(seq=None):
   write_final_alignment(virusAligner.refinedAlignment, structure)
 
 def derive_structure():
-  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp)
-  logger.info("Scanning alignment with a sliding-window approach for secondary structures.")
-  #struc.apply_alifold()
+  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
+  struc.apply_alifold()
   struc.calculate_avg_bpp()
   logger.info("Generating ILP based on all basepairing probabilities.")
   logger.info("Solving the ILP may take a while.")
