@@ -195,10 +195,12 @@ class Clusterer(object):
 
     with open(f'{outdir}/cluster.txt', 'w') as outStream:
       for i in set(self.allCluster):
-        outStream.write(f"Cluster: {i}\n")
-        for idx, label in enumerate(self.allCluster):
-          if label == i:
-            outStream.write(f"{self.id2header[idx]}\n")
+        with open(f'{outdir}/cluster{i}.fa', 'w') as fastaOut:
+          outStream.write(f"Cluster: {i}\n")
+          for idx, label in enumerate(self.allCluster):
+            if label == i:
+              outStream.write(f"{self.id2header[idx]}\n")
+              fastaOut.write(f">{self.id2header[idx]}\n{self.d_sequences[idx]}\n")
         outStream.write("\n")
 
 

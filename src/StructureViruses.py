@@ -148,9 +148,10 @@ class ILP(object):
     self.bpp_dict = bpp_dict
     self.outdir = outdir
     self.used_basepairs = []
-    self.generate_ilp()
-    self.solve_ilp()
-    self.extract_used_basepairs()
+    isSolved = self.generate_ilp()
+    if not isSolved:
+      self.solve_ilp()
+      self.extract_used_basepairs()
 
   def generate_ilp(self):
     """
@@ -158,6 +159,7 @@ class ILP(object):
 
     trivialCases = {}
     bpp_iterator = sorted(list(self.bpp_dict))
+    print(bpp_iterator)
     for idx, start in enumerate(bpp_iterator):
       values = self.bpp_dict[start]
       if len(values) == 1:
@@ -171,6 +173,8 @@ class ILP(object):
               self.used_basepairs.append((start, interactionPartner))
     
     filteredBPPs = {pos : values for pos, values in self.bpp_dict.items() if pos not in trivialCases}
+    if not filteredBPPs:
+      return(True)
     bpp_iterator = sorted(list(filteredBPPs))
 
     with open(f"{self.outdir}/tmpSequences/structure.ilp", 'w') as outputStream:
@@ -232,6 +236,7 @@ class ILP(object):
       for edge in edges:
         outputStream.write(f"{edge}\n")
       outputStream.write("End\n")
+    return False
         
       
   def solve_ilp(self):

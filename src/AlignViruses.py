@@ -73,32 +73,32 @@ class Aligner(object):
         entropies.append(entropy)
       holyEntropies.update({start : np.average(entropies)})
 
-    if self.shannon == -1:
-      cutoff = np.percentile(list(holyEntropies.values()), 10)
-    else:
-      cutoff = self.shannon
+    # if self.shannon == -1:
+    #   cutoff = np.percentile(list(holyEntropies.values()), 10)
+    # else:
+    #   cutoff = self.shannon
+    cutoff = np.percentile(list(holyEntropies.values()), self.shannon*100)
   
-    seedCandidates = {k: k+self.seedSize for k,v in holyEntropies.items() if v < cutoff}
+    seedCandidates = {k: k+self.seedSize for k,v in holyEntropies.items() if v <= cutoff}
     
-    # print(len(seedCandidates))
-    # print(len(self.seeds))
-
     for start, stop in seedCandidates.items():
       self.seeds[start] = stop
 
-    # print(len(self.seeds))
+    
     deleteMe = []
     for idx, start in enumerate(sorted(list(self.seeds))):
       for secondStart in sorted(list(self.seeds))[:idx]:
-        if secondStart - self.seedSize < start <= self.seeds[secondStart] + self.seedSize:
-          self.seeds[secondStart] = self.seeds[start]
+        if start-1 <= self.seeds[secondStart] < self.seeds[start]:
+        #if secondStart < start <= self.seeds[secondStart] + self.seedSize:
+          self.seeds[secondStart] = self.seeds[start]          
           deleteMe.append(start)
           break
 
     #print(len(self.seeds), len(deleteMe), len(seedCandidates))
     self.seeds = {start : stop for start, stop in self.seeds.items() if start not in deleteMe}
-    
-    
+    #print(len(self.seeds), len(deleteMe), len(seedCandidates))
+    #print(self.seeds)
+    #exit(0)
 
 
     nonSeedStart = 0

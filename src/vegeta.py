@@ -42,7 +42,7 @@ Options:
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 9]
+  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
   --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
                                           neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
@@ -54,7 +54,7 @@ Options:
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
-                                          If none (-1.0) is set, VeGETA takes the best 10% windows as seeds. [Default: -1.0]
+                                          If none is set, VeGETA takes the best 10% windows as seeds. [Default: 0.1]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
   --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
@@ -268,7 +268,7 @@ def perform_alignment(seq=None):
 
 def derive_structure():
   struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
-  #struc.apply_alifold()
+  struc.apply_alifold()
   struc.calculate_avg_bpp()
   struc.generate_ilp()
   struc.finalize_structure()
