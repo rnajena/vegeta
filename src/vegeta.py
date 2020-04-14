@@ -72,6 +72,7 @@ Version:
 import sys
 import os
 import logging
+import glob
 
 import numpy as np
 from multiprocessing import Pool
@@ -227,19 +228,37 @@ def parse_arguments(d_args):
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(logger, inputSequences, k, cutoff, proc)
+  virusClusterer = Clusterer(logger, inputSequences, k, proc)
   logger.info("Removing 100% identical sequences.")
   virusClusterer.remove_redundancy()
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
   virusClusterer.apply_umap(outdir)
-  clusterInfo = virusClusterer.allCluster
+  clusterInfo = virusClusterer.clusterlabel
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
   virusClusterer.get_centroids(outdir, multiPool)
   virusClusterer.split_centroids(outdir)
-  del virusClusterer
+
+  
+  
+  logger.info(f"Extracting representative sequences for each cluster.")
+  sequences = virusClusterer.d_sequences
+  distanceMatrix = virusClusterer.matrix
+  profiles = virusClusterer.d_profiles
+  #virusClusterer.create_subcluster()
+  #del virusClusterer
+  for file in glob.glob(f"{outdir}/cluster*.fa"):
+    if file == f"{outdir.rstrip('/')}/cluster-1.fa":
+      continue
+    virusSubClusterer = Clusterer(logger, file, k, proc, subCluster=True)
+    virusSubClusterer.d_sequences = virusSubClusterer.read_sequences()
+    #virusSubClusterer.determine_profile(multiPool)
+    virusSubClusterer.apply_umap(outdir)
+    virusSubClusterer.get_centroids(outdir, multiPool)
+    virusSubClusterer.split_centroids(outdir)
+
 
 def perform_alignment(seq=None):
   if seq:

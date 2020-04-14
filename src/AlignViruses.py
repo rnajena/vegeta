@@ -144,10 +144,6 @@ class Aligner(object):
           self.logger.warning(f"{self.outdir}/tmpSequences/{bn}.out exists! Will overwrite content.")
         with open(path, 'w') as outputStream:
           subprocess.run(cmd.split(), check=True, stdout=outputStream)
-        #fragmentStructure = StructCalculator(path, *self.structureParameter)
-        #print(idx)
-        #fragmentStructure.apply_lalifold()
-        #exit(0)
 
   def merge_fragments(self):
     """
@@ -179,9 +175,6 @@ class Aligner(object):
     self.refinedAlignment = MultipleSeqAlignment(self.refinedAlignment)
     
     AlignIO.write(self.refinedAlignment, f"{self.outdir}/refinedAlignment.aln", "clustal")
-    #with open(f"{self.outdir}/refinedAlignment.aln", 'w') as outputStream:
-    #  for header, sequence in self.refinedAlignment.items():
-    #    outputStream.write(f">{header}\n{sequence}\n")
 
   def read_sequences(self):
     """

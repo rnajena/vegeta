@@ -14,6 +14,7 @@ import os
 import subprocess
 import re
 
+
 import scipy
 import random
 
@@ -23,16 +24,12 @@ import hdbscan
 class Clusterer(object):
   """
   """
-
-  d_profiles = {} 
+ 
   id2header = {}
+  d_profiles = {}
   header2id = {}
-  allCluster = []
   dim = 0
-  probabilities = []
-
-
-
+  matrix = np.empty(shape=(dim,dim))
   codon2aminoacid = { 
         'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M', 
         'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T', 
@@ -52,32 +49,38 @@ class Clusterer(object):
         'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W', 
     } 
 
-  def __init__(self, logger, sequenceFile, k, cutoff, proc):
+  def __init__(self, logger, sequenceFile, k, proc, subCluster=False):
     """
     """
 
 
     #self.logger = logger
-    self.sequenceFile = sequenceFile
-    self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
-    self.k = k
-    self.cutoff = cutoff
-    self.nucleotides = set(["A","C","G","T"])
-    self.allKmers = {''.join(kmer):x for x,kmer in enumerate(itertools.product(self.nucleotides, repeat=self.k))}
-    self.proc = proc
-    self.d_comp = {"A" : "T", "C" : "G", "G" : "C", "T" : "A"}
-    self.d_sequences = {}
-    self.dim = 0
+
+    self.subCluster = subCluster
+
+    if not self.subCluster:
+      self.sequenceFile = sequenceFile
+      self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
+    else:
+      self.reducedSequences = sequenceFile
     
+    self.k = k
+
+    nucleotides = set(["A","C","G","T"])
+    self.allKmers = {''.join(kmer):x for x,kmer in enumerate(itertools.product(nucleotides, repeat=self.k))}
+    self.proc = proc
+    self.d_sequences = {}    
     self.centroids = []
-    #TODO: der regex muss lazy evaluieren... see whether it does!
-    #self.regex_orf = re.compile(r'((ATG|CTG)(...){25,}?(TAG|TAA|TGA))')
     self.regex_orf = re.compile(r'M[^*]{25,}?\*')
+    self.allCluster = []
+    self.clusterlabel = []
+    self.probabilities = []
 
   def rev_comp(self, sequence):
     """
     """
-    return ("".join([self.d_comp[nt] if nt in self.d_comp else nt for nt in sequence[::-1]]))
+    d_comp = {"A" : "T", "C" : "G", "G" : "C", "T" : "A"}
+    return ("".join([d_comp[nt] if nt in d_comp else nt for nt in sequence[::-1]]))
   
   def remove_redundancy(self):
     """
@@ -86,8 +89,6 @@ class Clusterer(object):
     TRASH = open(os.devnull, 'w')
     subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
     self.d_sequences = self.read_sequences()
-    self.dim = len(self.d_sequences)
-    self.matrix = np.zeros(shape=(self.dim, self.dim),dtype=float)
 
   def read_sequences(self):
     """
@@ -95,6 +96,7 @@ class Clusterer(object):
     fastaContent = {}
     idHead = -1
     
+    print(f"Reading {self.reducedSequences}")
     with open(self.reducedSequences, 'r') as inputStream:
       header = ''
       seq = ''
@@ -104,20 +106,32 @@ class Clusterer(object):
           if header:
             seq = seq + "X"*10 + self.rev_comp(seq)
             #if not seq in uniqueSeqs:
-            fastaContent[idHead] = seq
-            self.id2header[idHead] = header
-            self.header2id[header] = idHead
+            if not self.subCluster:
+              Clusterer.id2header[idHead] = header
+              Clusterer.header2id[header] = idHead
+              fastaContent[idHead] = seq
+            else:
+              fastaContent[Clusterer.header2id[header]] = seq
           header = line.rstrip("\n").replace(':','_').replace(' ','_').lstrip(">")
           seq = ''
           idHead += 1
         else:
           seq += line.rstrip("\n").upper().replace('U','T')
 
-      #seq = seq + "X"*10 + self.rev_comp(seq)
-      fastaContent[idHead] = seq
-      self.id2header[idHead] = header
-      self.header2id[header] = idHead
+      seq = seq + "X"*10 + self.rev_comp(seq)
+      
+      if not self.subCluster:
+        Clusterer.id2header[idHead] = header
+        Clusterer.header2id[header] = idHead
+        fastaContent[idHead] = seq
+      else:
+        fastaContent[Clusterer.header2id[header]] = seq
+
+    if not self.subCluster:      
+      Clusterer.dim = len(fastaContent)
+      Clusterer.matrix = np.zeros(shape=(Clusterer.dim, Clusterer.dim), dtype=float)
     return fastaContent
+
 
   def profile(self, entry):
     """
@@ -138,70 +152,58 @@ class Clusterer(object):
     allProfiles = p.map(self.profile, self.d_sequences.items())
     p.close()
     p.join()
-    for header, profile in allProfiles:
-    #for header, profile in p.map(self.profile, self.d_sequences.items()):
-      self.d_profiles[header] = profile
+    for header, profile in allProfiles:  
+      Clusterer.d_profiles[header] = profile
 
   def calc_pd(self, seqs):
-    #seq1, seq2, subProfiles = seqs
-    
-    
-    #profile1 = np.array(subProfiles[seq1])
-    #profile2 = np.array(subProfiles[seq2])
-    
+    """
+    """
     for element in seqs:
       try:
         stuff = (element[0], element[1])
       except TypeError:
-        #print(element)
-        #print(seqs)
-        return None
-    #return (0)
-    
+        return None   
     seq1, profile1 = seqs[0]
     seq2, profile2 = seqs[1]
-    #except TypeError:
-    #  print(seqs)
-    #  return (-1, -1, 0)
-
     distance = scipy.spatial.distance.cosine(profile1, profile2)
-    #return distance
     return (seq1, seq2, distance)
     #       
 
   def apply_umap(self, outdir):
     """
     """
-    profiles = []
-    for idx, _ in enumerate(self.d_profiles):
-      profiles.append(self.d_profiles[idx])
+    profiles = [(idx,profile) for idx, profile in Clusterer.d_profiles.items() if idx in self.d_sequences]
+    vector = [x[1] for x in profiles]
+    #for idx, _ in enumerate(Clusterer.d_profiles):
+    #  profiles.append(Clusterer.d_profiles[idx])
   
     clusterable_embedding = umap.UMAP(
           n_neighbors=20,
-          min_dist=0.0,
-          n_components=10,
+          min_dist=0.25,
+          n_components=20,
           random_state=42,
           metric='cosine',
-      ).fit_transform(profiles)
+      ).fit_transform(vector)
     
     clusterer = hdbscan.HDBSCAN()
     clusterer.fit(clusterable_embedding)
 
-    self.allCluster = clusterer.labels_
+    self.allCluster = zip([x[0] for x in profiles], clusterer.labels_)
+    print(self.allCluster)
+    self.clusterlabel = clusterer.labels_
     self.probabilities = clusterer.probabilities_
 
-    print()
-    print()
 
-    with open(f'{outdir}/cluster.txt', 'w') as outStream:
-      for i in set(self.allCluster):
-        with open(f'{outdir}/cluster{i}.fa', 'w') as fastaOut:
-          outStream.write(f"Cluster: {i}\n")
-          for idx, label in enumerate(self.allCluster):
-            if label == i:
-              outStream.write(f"{self.id2header[idx]}\n")
-              fastaOut.write(f">{self.id2header[idx]}\n{self.d_sequences[idx]}\n")
-        outStream.write("\n")
+    if not self.subCluster:
+      with open(f'{outdir}/cluster.txt', 'w') as outStream:
+        for i in set(self.clusterlabel):
+          with open(f'{outdir}/cluster{i}.fa', 'w') as fastaOut:
+            outStream.write(f"Cluster: {i}\n")
+            for idx, label in self.allCluster:
+              if label == i:
+                outStream.write(f"{Clusterer.id2header[idx]}\n")
+                fastaOut.write(f">{Clusterer.id2header[idx]}\n{self.d_sequences[idx]}\n")
+          outStream.write("\n")
 
 
   def get_centroids(self, outdir, proc):
@@ -219,18 +221,14 @@ class Clusterer(object):
       if cluster == -1:
         continue
 
-      subProfiles = {seq : profile for seq, profile in self.d_profiles.items() if seq in sequences}
-
-
-      for result in p.map(self.calc_pd, itertools.combinations(subProfiles.items(), 2)):
-    #for seq1, seq2 in itertools.combinations(subProfiles, 2):
-        #print(result)
-        seq1, seq2, dist = result
-        #dist = self.calc_pd((seq1, seq2, subProfiles))
-        self.matrix[seq1][seq2] = dist
-        self.matrix[seq2][seq1] = dist
+      subProfiles = {seq : profile for seq, profile in Clusterer.d_profiles.items() if seq in sequences}
+      print(subProfiles.keys())
+      if not self.subCluster:
+        for result in p.map(self.calc_pd, itertools.combinations(subProfiles.items(), 2)):
+          seq1, seq2, dist = result
+          Clusterer.matrix[seq1][seq2] = dist
+          Clusterer.matrix[seq2][seq1] = dist
       
-      #self.logger.info("Distances are calculated!")
       tmpMinimum = math.inf
       centroidOfCluster = -1
 
@@ -245,7 +243,7 @@ class Clusterer(object):
         for neighborSequence in sequences:
           if sequence == neighborSequence:
             continue
-          averagedDistance += self.matrix[sequence][neighborSequence]
+          averagedDistance += Clusterer.matrix[sequence][neighborSequence]
           
 
         averagedDistance /= len(sequences)-1
@@ -255,7 +253,6 @@ class Clusterer(object):
           centroidOfCluster = sequence
 
       self.centroids.append(centroidOfCluster)
-    #self.centroids = p.map(self.centroid_from_cluster, seqCluster.items())
     p.close()
     p.join()
 
@@ -263,10 +260,8 @@ class Clusterer(object):
   def split_centroids(self, outdir):
     """
     """
+    
     centroids = { centroid : self.d_sequences[centroid].split("X"*10) for centroid in self.centroids }
-    # with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
-    #   for centroidID, sequence in centroids.items():
-    #     outStream.write(f">{self.id2header[centroidID]}\n{sequence}\n")
     reprSeqs = {}
     for centroidID, strands in centroids.items():
       positiveStrand = ""
@@ -289,19 +284,11 @@ class Clusterer(object):
             positiveStrand = strand
       reprSeqs[centroidID] = positiveStrand 
     
-    with open(f'{outdir}/representative_viruses.fa', 'w') as outStream:
-      for centroidID, sequence in reprSeqs.items():
-        outStream.write(f">{self.id2header[centroidID]}\n{sequence}\n")
-      
+    if not self.subCluster:
+      outputPath = f'{outdir}/representative_viruses.fa'
+    else:
+      outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.reducedSequences))[0]}_repr.fa'
 
-      #for strand in strands:
-      #  matches = self.regex_orf.findall(strand)
-        #matches = [self.regex_orf.findall(strand) for strand in strands]
-        
-      #  print(centroidID, len(matches))
-      #  allORFs = "".join([x[0] for x in matches if x])
-      #  print(len(allORFs)/len(strand))
-      
-      #print(f"Start Codon {[x.count('ATG') for x in strands]}")
-      #print(f"Stop Codon {[len(self.regex_stop.findall(strand)) for strand in strands]}")
-    
+    with open(outputPath, 'w') as outStream:
+      for centroidID, sequence in reprSeqs.items():
+        outStream.write(f">{Clusterer.id2header[centroidID]}\n{sequence}\n")    
