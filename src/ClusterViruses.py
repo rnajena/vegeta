@@ -174,8 +174,6 @@ class Clusterer(object):
     """
     profiles = [(idx,profile) for idx, profile in Clusterer.d_profiles.items() if idx in self.d_sequences]
     vector = [x[1] for x in profiles]
-    #for idx, _ in enumerate(Clusterer.d_profiles):
-    #  profiles.append(Clusterer.d_profiles[idx])
   
     clusterable_embedding = umap.UMAP(
           n_neighbors=20,
@@ -188,8 +186,7 @@ class Clusterer(object):
     clusterer = hdbscan.HDBSCAN()
     clusterer.fit(clusterable_embedding)
 
-    self.allCluster = zip([x[0] for x in profiles], clusterer.labels_)
-    print(self.allCluster)
+    self.allCluster = list(zip([x[0] for x in profiles], clusterer.labels_))
     self.clusterlabel = clusterer.labels_
     self.probabilities = clusterer.probabilities_
 
@@ -209,10 +206,9 @@ class Clusterer(object):
   def get_centroids(self, outdir, proc):
     """
     """
-    
-    seqCluster = { x : [] for x in set(self.allCluster)}
+    seqCluster = { x : [] for x in set(self.clusterlabel)}
 
-    for idx, cluster in enumerate(self.allCluster):
+    for idx, cluster in self.allCluster:
       seqCluster[cluster].append(idx)
 
     p = Pool(self.proc)
@@ -222,7 +218,7 @@ class Clusterer(object):
         continue
 
       subProfiles = {seq : profile for seq, profile in Clusterer.d_profiles.items() if seq in sequences}
-      print(subProfiles.keys())
+
       if not self.subCluster:
         for result in p.map(self.calc_pd, itertools.combinations(subProfiles.items(), 2)):
           seq1, seq2, dist = result
