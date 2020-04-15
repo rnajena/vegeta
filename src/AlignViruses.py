@@ -28,7 +28,7 @@ class Aligner(object):
   """
   """
 
-  def __init__(self, logger, inputFile, proc, outdir, seedSize, shannon, structureParameter):
+  def __init__(self, logger, inputFile, proc, outdir, seedSize, shannon, structureParameter, prefix):
     """
     """
 
@@ -43,6 +43,7 @@ class Aligner(object):
     self.nonSeeds = {}
     self.structureParameter = structureParameter 
     self.refinedAlignment = []
+    self.prefix = prefix
     
   def __getstate__(self):
     self_dict = self.__dict__.copy()
@@ -52,10 +53,10 @@ class Aligner(object):
   def mafft_scaffold(self):
     """
     """
-    with open(f"{self.outdir}/scaffold.aln", 'w') as outputStream:
+    with open(f"{self.outdir}/{self.prefix}_scaffold.aln", 'w') as outputStream:
       cmd = f"mafft --quiet --reorder --clustalout --thread {self.proc} {self.inputFile}"
       subprocess.run(cmd.split(), stdout=outputStream, check=True)
-    self.alignment = AlignIO.read(f"{self.outdir}/scaffold.aln", 'clustal')
+    self.alignment = AlignIO.read(f"{self.outdir}/{self.prefix}_scaffold.aln", 'clustal')
     self.nonSeeds[0] = self.alignment.get_alignment_length()
 
   def find_seeds_in_scaffold(self):
@@ -118,7 +119,7 @@ class Aligner(object):
     """
     for idx, (start, stop) in self.nonSeeds.items():
       alnFragment = self.alignment[:, start:stop+1]
-      with open(f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta", 'w') as outputStream:
+      with open(f"{self.outdir}/tmpSequences/{self.prefix}_diverseFragment_{idx}.fasta", 'w') as outputStream:
         for record in alnFragment:
           outputStream.write(f">{record.id}\n{str(record.seq).replace('-','')}\n")
       
@@ -128,7 +129,7 @@ class Aligner(object):
     """
     """
     for idx in self.nonSeeds:
-      file = f"{self.outdir}/tmpSequences/diverseFragment_{idx}.fasta"
+      file = f"{self.outdir}/tmpSequences/{self.prefix}_diverseFragment_{idx}.fasta"
       start, stop = self.nonSeeds[idx]
       if all( [ len(str(x.seq).replace('-','')) <= 300 for x in self.alignment[:, start:stop] ] ):
         cmd = f"mlocarna --quiet --stockholm --threads {self.proc} {file}"
@@ -156,25 +157,27 @@ class Aligner(object):
     else:
       order = itertools.zip_longest(static, flexible)
     
-    
     finalAlignment = {record.id : "" for record in self.alignment}
-    for fragment in order:
+    for fragment in order:  
       for element in fragment:
-        if not element:
+        if not element or element[-1] == -1:
           continue
         if len(element) == 3:
-          alnFrag = AlignIO.read(f"{self.outdir}/tmpSequences/diverseFragment_{element[0]}.out/results/result.aln", 'clustal')    
+          if element[1] == element[2]:
+            continue
+          alnFrag = AlignIO.read(f"{self.outdir}/tmpSequences/{self.prefix}_diverseFragment_{element[0]}.out/results/result.aln", 'clustal')
           for record in alnFrag:
             finalAlignment[record.id] += str(record.seq).upper().replace('U','T')
         elif len(element) == 2:
           for record in self.alignment:
             finalAlignment[record.id] += str(record.seq)[element[0]:element[1]+1].upper().replace('U','T')
 
+    #print(finalAlignment)
     for name, sequence in finalAlignment.items():
       self.refinedAlignment.append(SeqRecord(Seq(sequence), id=name))
     self.refinedAlignment = MultipleSeqAlignment(self.refinedAlignment)
     
-    AlignIO.write(self.refinedAlignment, f"{self.outdir}/refinedAlignment.aln", "clustal")
+    AlignIO.write(self.refinedAlignment, f"{self.outdir}/{self.prefix}_refinedAlignment.aln", "clustal")
 
   def read_sequences(self):
     """

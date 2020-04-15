@@ -121,7 +121,6 @@ def create_logger():
                                             'CRITICAL': 'bold_red'}
                                 )
 
-    #handle.setFormatter(logging.Formatter("ViMiFi %(levelname)s -- %(asctime)s -- %(message)s", "%Y-%m-%d %H:%M:%S"))
     handle.setFormatter(formatter)
     logger.addHandler(handle)
     return logger
@@ -263,39 +262,43 @@ def perform_clustering():
     virusSubClusterer.split_centroids(outdir)
     del virusSubClusterer
 
-
 def perform_alignment(seq=None):
-  if seq:
-    clusteredSequences = seq
-  else:
-    clusteredSequences = f'{outdir}/representative_viruses.fa'
+
+  #if seq:
+  #  clusteredSequences = seq
+  #else:
+  #  clusteredSequences = f'{outdir}/representative_viruses.fa'
   logger.info("Starting the alignment step of VeGETA.\n")
 
-  if goi:
-    logger.info(f"Including your virus of interest:\n{goi}\n")
-    with open(clusteredSequences, 'a') as outputStream:
-      with open(goi, 'r') as inputStream:
-        outputStream.write("".join(inputStream.readlines()))
+  #if goi:
+  #  logger.info(f"Including your virus of interest:\n{goi}\n")
+  #  with open(clusteredSequences, 'a') as outputStream:
+  #    with open(goi, 'r') as inputStream:
+  #      outputStream.write("".join(inputStream.readlines()))
 
-  logger.info("Calculating initial mafft alignment")
-  virusAligner = Aligner(logger, clusteredSequences, proc, outdir, seedSize, shannon, structureParameter)
-  #virusAligner.mafft_scaffold()
-  logger.info("Finding conserved seeds in the alignment")
-  #virusAligner.find_seeds_in_scaffold()
-  logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
-  logger.info("Extracting sequences between seeds")
-  #virusAligner.extract_non_seeds()
-  logger.info("Applying LocARNA on fragments")
-  #virusAligner.refine_fragments(windowSize, stepSize)
-  logger.info("Merging all fragments to a whole alignment")
-  #virusAligner.merge_fragments()
-  logger.info("Refined alignment calculated. Deriving final structure now!")
-  structure = derive_structure()
-  logger.info("Saving the final alignment in STOCKHOLM format")
-  write_final_alignment(virusAligner.refinedAlignment, structure)
+  
+  for file in glob.glob(f"{outdir}/*_repr.fa"):
+    prefix = os.path.splitext(os.path.basename(file))[0]
+    logger.info(f"Calculating Alignment for {prefix.split('_repr')[0]}")
+    virusAligner = Aligner(logger, file, proc, outdir, seedSize, shannon, structureParameter, prefix)
+    logger.info("Calculating initial mafft alignment")
+    virusAligner.mafft_scaffold()
+    logger.info("Finding conserved seeds in the alignment")
+    virusAligner.find_seeds_in_scaffold()
+    logger.info(f"Found {len(virusAligner.seeds)} seed regions in the alignment")
+    logger.info("Extracting sequences between seeds")
+    virusAligner.extract_non_seeds()
+    logger.info("Applying LocARNA on fragments")
+    virusAligner.refine_fragments(windowSize, stepSize)
+    logger.info("Merging all fragments to a whole alignment")
+    virusAligner.merge_fragments()
+    logger.info("Refined alignment calculated. Deriving final structure now!")
+    structure = derive_structure(prefix)
+    logger.info("Saving the final alignment in STOCKHOLM format")
+    write_final_alignment(virusAligner.refinedAlignment, structure)
 
-def derive_structure():
-  struc = StructCalculator(f"{outdir}/refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP)
+def derive_structure(prefix):
+  struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix)
   struc.apply_alifold()
   struc.calculate_avg_bpp()
   logger.info("Generating ILP based on all basepairing probabilities.")

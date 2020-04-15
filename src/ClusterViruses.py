@@ -89,6 +89,7 @@ class Clusterer(object):
     TRASH = open(os.devnull, 'w')
     subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
     self.d_sequences = self.read_sequences()
+    TRASH.close()
 
   def read_sequences(self):
     """
@@ -213,7 +214,7 @@ class Clusterer(object):
             for idx, label in self.allCluster:
               if label == i:
                 outStream.write(f"{Clusterer.id2header[idx]}\n")
-                fastaOut.write(f">{Clusterer.id2header[idx]}\n{self.d_sequences[idx]}\n")
+                fastaOut.write(f">{Clusterer.id2header[idx]}\n{self.d_sequences[idx].split('X'*10)[0]}\n")
           outStream.write("\n")
 
 
@@ -276,6 +277,7 @@ class Clusterer(object):
     for centroidID, strands in centroids.items():
       positiveStrand = ""
       longestCDS = 0
+
       for strand in strands:
         for frame in range(3):
           proteinSequence = ""

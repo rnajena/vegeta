@@ -23,10 +23,11 @@ class StructCalculator(object):
   """
   """
 
-  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp):
+  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix):
     """
     """
     self.logger = logger
+    self.prefix = prefix
     self.outdir = outdir
     self.windowSize = windowSize
     self.allowLP = allowLP
@@ -55,7 +56,7 @@ class StructCalculator(object):
     """
     windows = [(start, start+self.windowSize) for start in range(0, self.alnLength-self.windowSize, self.stepSize)] + [(self.alnLength-self.windowSize,self.alnLength)]
     for idx,(start,stop) in enumerate(windows):
-      with open(f"{self.outdir}/tmpSequences/window_{idx}.aln" ,'w') as outputStream:
+      with open(f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}.aln" ,'w') as outputStream:
         fragment = self.alignment[:, start:stop]
         for record in fragment:
           outputStream.write(f">{record.id}\n{record.seq}\n")
@@ -66,24 +67,26 @@ class StructCalculator(object):
   def apply_alifold(self):
     """
     """
+    TRASH = open(os.devnull, 'w')
     for idx, _ in enumerate(self.windows):
-      file = f"{self.outdir}/tmpSequences/window_{idx}.aln"
-      cmd = f"RNAalifold --noLP -p --cfactor 0.6 --nfactor 0.5 -r --id-prefix=window_{idx} {file}"
-      subprocess.run(cmd.split(), check=True)
+      file = f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}.aln"
+      cmd = f"RNAalifold --noLP -p --cfactor 0.6 --nfactor 0.5 -r --id-prefix={self.prefix}_window_{idx} {file}"
+      subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
     for file in os.listdir():
       if file.endswith("dp.ps"):
         shutil.move(file, f"{self.outdir}/tmpSequences/{file}")
       elif file.endswith("out") or file.endswith("ss.ps"):
         os.remove(file)
+    TRASH.close()
 
 
   def calculate_avg_bpp(self):
     """
     """
     
-    for file in glob.glob(f"{self.outdir}/tmpSequences/window_*.ps"):
+    for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_window_*.ps"):
       
-      idx = int(os.path.basename(file).split('_')[1])
+      idx = int(os.path.basename(file).split('_')[-3])
       currentWindow = self.windows[idx]
       with open(file, 'r') as inputStream:
         for line in inputStream:
@@ -116,7 +119,7 @@ class StructCalculator(object):
   def generate_ilp(self):
     """
     """
-    ilp = ILP(self.bpps, self.outdir)
+    ilp = ILP(self.bpps, self.outdir, self.prefix)
     self.used_basepairs = ilp.used_basepairs
 
   def finalize_structure(self):
@@ -136,7 +139,7 @@ class StructCalculator(object):
       self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
     
     #print(self.used_basepairs)
-    print(self.finalStructure)
+    #print(self.finalStructure)
 
   def apply_lalifold(self):
     """
@@ -155,7 +158,7 @@ class StructCalculator(object):
     lastStart = -1
     lastStop = -1
     
-    print(structureWindows)
+    #print(structureWindows)
     for start in sorted(list(structureWindows)):
       if lastStart < start <= lastStop:
         self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
@@ -180,31 +183,20 @@ class StructCalculator(object):
       else:
         stop = stop + 20
 
-      print(self.alignment[:, start:stop])
+     # print(self.alignment[:, start:stop])
 
-
-    
-
-    # for start, stop in self.nonOverlap.items():
-      # if stop == len(structureWindows[start])+start-1:
-        # self.finalStructure = self.finalStructure[:start] + structureWindows[start] + self.finalStructure[stop+1:]
-      # else:
-        # self.overlappingStructures[start] = stop
-    
-    #print(self.nonOverlap)
-    #print(self.overlappingStructures)
-    #self.resolve_conflicts()
 
 class ILP(object):
   """
   """
 
-  def __init__(self, bpp_dict, outdir):
+  def __init__(self, bpp_dict, outdir, prefix):
     """
     """
     self.bpp_dict = bpp_dict
     self.outdir = outdir
     self.used_basepairs = []
+    self.prefix = prefix
     isSolved = self.generate_ilp()
     if not isSolved:
       self.solve_ilp()
@@ -216,7 +208,7 @@ class ILP(object):
 
     trivialCases = {}
     bpp_iterator = sorted(list(self.bpp_dict))
-    print(bpp_iterator)
+    #print(bpp_iterator)
     for idx, start in enumerate(bpp_iterator):
       values = self.bpp_dict[start]
       if len(values) == 1:
@@ -235,36 +227,36 @@ class ILP(object):
     bpp_iterator = sorted(list(filteredBPPs))
 
 
-    connectedComponents = []
-    newComponent = set()
+    #connectedComponents = []
+    #newComponent = set()
     
-    while bpp_iterator:
-      left = bpp_iterator[0]
-      rightValues = max(self.bpp_dict[left])
-      inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
-      while inBetween:
-        for x in inBetween:
-          newComponent.add(x)
+    #while bpp_iterator:
+      #left = bpp_iterator[0]
+      #rightValues = max(self.bpp_dict[left])
+      #inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
+      #while inBetween:
+        #for x in inBetween:
+        #  newComponent.add(x)
           
-        firstElement = inBetween.pop(0)
-        print(inBetween)
-        inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
-        print(inBetween)
-        print()
-      print(newComponent)
-      exit(0)
+        #firstElement = inBetween.pop(0)
+        #print(inBetween)
+        #inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
+        #print(inBetween)
+       # print()
+      #print(newComponent)
+      #exit(0)
       
       #print(bpp_iterator)
-      bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
-      connectedComponents.append(newComponent)
+      #bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
+      #connectedComponents.append(newComponent)
       
       #print(bpp_iterator)
-      newComponent = set()  
+      #newComponent = set()  
     
     
     #print(connectedComponents)
-    exit(0)
-    with open(f"{self.outdir}/tmpSequences/structure.ilp", 'w') as outputStream:
+   # exit(0)
+    with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp", 'w') as outputStream:
       outputStream.write("Maximize\n")
       outputStream.write("obj: ")
       edges = []
@@ -329,14 +321,16 @@ class ILP(object):
   def solve_ilp(self):
     """
     """
-    cmd = f"glpsol --lp {self.outdir}/tmpSequences/structure.ilp --mipgap 0.01 --pcost --cuts --memlim 16834 --tmlim 14400 -o  {self.outdir}/tmpSequences/structure.ilp.sol"
-    subprocess.run(cmd.split(), check=True)
+    TRASH = open(os.devnull, 'w')
+    cmd = f"glpsol --lp {self.outdir}/tmpSequences/{self.prefix}_structure.ilp --mipgap 0.01 --pcost --cuts --memlim 16834 --tmlim 14400 -o {self.outdir}/tmpSequences/{self.prefix}_structure.ilp.sol"
+    subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
+    TRASH.close()
 
   def extract_used_basepairs(self):
     """
     """
     
-    with open(f"{self.outdir}/tmpSequences/structure.ilp.sol", 'r') as inputStream:
+    with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp.sol", 'r') as inputStream:
       for line in inputStream:
         line = line.strip().split()
         if len(line) < 4: 
