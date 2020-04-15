@@ -54,12 +54,12 @@ class Clusterer(object):
     """
 
 
-    #self.logger = logger
+   # self.logger = logger
 
     self.subCluster = subCluster
+    self.sequenceFile = sequenceFile
 
     if not self.subCluster:
-      self.sequenceFile = sequenceFile
       self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
     else:
       self.reducedSequences = sequenceFile
@@ -96,7 +96,7 @@ class Clusterer(object):
     fastaContent = {}
     idHead = -1
     
-    print(f"Reading {self.reducedSequences}")
+    #print(f"Reading {self.reducedSequences}")
     with open(self.reducedSequences, 'r') as inputStream:
       header = ''
       seq = ''
@@ -174,22 +174,36 @@ class Clusterer(object):
     """
     profiles = [(idx,profile) for idx, profile in Clusterer.d_profiles.items() if idx in self.d_sequences]
     vector = [x[1] for x in profiles]
+
+    if self.subCluster:
+      neighbors, dist = 5, 0.0
+    else:
+      neighbors, dist = 50, 0.25
   
-    clusterable_embedding = umap.UMAP(
-          n_neighbors=20,
-          min_dist=0.25,
-          n_components=20,
-          random_state=42,
-          metric='cosine',
-      ).fit_transform(vector)
-    
-    clusterer = hdbscan.HDBSCAN()
-    clusterer.fit(clusterable_embedding)
 
-    self.allCluster = list(zip([x[0] for x in profiles], clusterer.labels_))
-    self.clusterlabel = clusterer.labels_
-    self.probabilities = clusterer.probabilities_
+    try:
+      clusterable_embedding = umap.UMAP(
+            n_neighbors=neighbors,
+            min_dist=dist,
+            n_components=20,
+            random_state=42,
+            metric='cosine',
+        ).fit_transform(vector)
 
+      clusterer = hdbscan.HDBSCAN()
+      clusterer.fit(clusterable_embedding)
+
+      self.clusterlabel = clusterer.labels_
+      self.probabilities = clusterer.probabilities_
+
+    except TypeError:
+      #logger.warn(f"Too few sequences for clustering. Taking all sequences of {os.path.basename(self.sequenceFile)} for then alignment.")
+      #print("Too few sequences for clustering. Taking the original input for the alignment.")
+      import shutil
+      shutil.copyfile(self.sequenceFile, f'{outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa')
+      return 1
+
+    self.allCluster = list(zip([x[0] for x in profiles], self.clusterlabel))
 
     if not self.subCluster:
       with open(f'{outdir}/cluster.txt', 'w') as outStream:
@@ -280,10 +294,10 @@ class Clusterer(object):
             positiveStrand = strand
       reprSeqs[centroidID] = positiveStrand 
     
-    if not self.subCluster:
-      outputPath = f'{outdir}/representative_viruses.fa'
-    else:
-      outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.reducedSequences))[0]}_repr.fa'
+    #if not self.subCluster:
+    #  outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.reducedSequences))[0]}_repr.fa'
+    #else:
+    outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa'
 
     with open(outputPath, 'w') as outStream:
       for centroidID, sequence in reprSeqs.items():

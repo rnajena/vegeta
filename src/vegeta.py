@@ -248,16 +248,20 @@ def perform_clustering():
   distanceMatrix = virusClusterer.matrix
   profiles = virusClusterer.d_profiles
   #virusClusterer.create_subcluster()
-  #del virusClusterer
+  del virusClusterer
   for file in glob.glob(f"{outdir}/cluster*.fa"):
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
     virusSubClusterer = Clusterer(logger, file, k, proc, subCluster=True)
     virusSubClusterer.d_sequences = virusSubClusterer.read_sequences()
-    #virusSubClusterer.determine_profile(multiPool)
-    virusSubClusterer.apply_umap(outdir)
+    code = virusSubClusterer.apply_umap(outdir)
+    if code == 1:
+      logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+      del virusSubClusterer
+      continue
     virusSubClusterer.get_centroids(outdir, multiPool)
     virusSubClusterer.split_centroids(outdir)
+    del virusSubClusterer
 
 
 def perform_alignment(seq=None):
