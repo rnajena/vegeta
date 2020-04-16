@@ -13,6 +13,7 @@ import subprocess
 import shutil
 import glob
 import math
+import itertools
 
 import numpy as np
 from Bio import AlignIO
@@ -130,10 +131,11 @@ class StructCalculator(object):
 
     for start, stop in self.used_basepairs:
       if not self.allowLP:
+        print(self.allowLP)
         startRange = [start-1, start+1]
         stopRange = [stop-1, stop+1]
         if not (any([x in allStarts for x in startRange]) or any([x in allStops for x in stopRange])):
-          if stop-start >= 4:
+          if stop-start >= 20:
             continue
 
       self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
@@ -141,49 +143,49 @@ class StructCalculator(object):
     #print(self.used_basepairs)
     #print(self.finalStructure)
 
-  def apply_lalifold(self):
-    """
-    """
+  # def apply_lalifold(self):
+  #   """
+  #   """
 
-    cmd = f"RNALalifold --noLP --cfactor 0.6 --nfactor 0.5 -r -L {self.windowSize} {self.path}"
-    lalifoldResult = subprocess.getoutput(cmd)
-    structureWindows = {}
-    windows = lalifoldResult.split("\n")[1:-1]
-    for structure in windows:
-      structure = structure.split()
-      start = int(structure[-3])
-      structureWindows[start] = structure[0]
+  #   cmd = f"RNALalifold --noLP --cfactor 0.6 --nfactor 0.5 -r -L {self.windowSize} {self.path}"
+  #   lalifoldResult = subprocess.getoutput(cmd)
+  #   structureWindows = {}
+  #   windows = lalifoldResult.split("\n")[1:-1]
+  #   for structure in windows:
+  #     structure = structure.split()
+  #     start = int(structure[-3])
+  #     structureWindows[start] = structure[0]
 
-    #nonOverlap = {}
-    lastStart = -1
-    lastStop = -1
+  #   #nonOverlap = {}
+  #   lastStart = -1
+  #   lastStop = -1
     
-    #print(structureWindows)
-    for start in sorted(list(structureWindows)):
-      if lastStart < start <= lastStop:
-        self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
-      else:
-        self.nonOverlap[start] = start + len(structureWindows[start]) -1
-        lastStart = start
-      lastStop = start + len(structureWindows[start]) -1
+  #   #print(structureWindows)
+  #   for start in sorted(list(structureWindows)):
+  #     if lastStart < start <= lastStop:
+  #       self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
+  #     else:
+  #       self.nonOverlap[start] = start + len(structureWindows[start]) -1
+  #       lastStart = start
+  #     lastStop = start + len(structureWindows[start]) -1
 
     
-    lastStart = -1
-    lastStop = -1
-    sortedStarts = sorted(list(self.nonOverlap))
-    for idx, start in enumerate(sortedStarts):
-      stop = self.nonOverlap[start]
-      if start - 20 < 0:
-        start = 0
-      else:
-        start = start - 20
+  #   lastStart = -1
+  #   lastStop = -1
+  #   sortedStarts = sorted(list(self.nonOverlap))
+  #   for idx, start in enumerate(sortedStarts):
+  #     stop = self.nonOverlap[start]
+  #     if start - 20 < 0:
+  #       start = 0
+  #     else:
+  #       start = start - 20
       
-      if stop + 20 >= self.alnLength:
-        stop = self.alnLength
-      else:
-        stop = stop + 20
+  #     if stop + 20 >= self.alnLength:
+  #       stop = self.alnLength
+  #     else:
+  #       stop = stop + 20
 
-     # print(self.alignment[:, start:stop])
+  #    # print(self.alignment[:, start:stop])
 
 
 class ILP(object):
@@ -227,117 +229,149 @@ class ILP(object):
     bpp_iterator = sorted(list(filteredBPPs))
 
 
-    #connectedComponents = []
-    #newComponent = set()
+    connectedComponents = []
+    newComponent = set()
     
-    #while bpp_iterator:
-      #left = bpp_iterator[0]
-      #rightValues = max(self.bpp_dict[left])
-      #inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
-      #while inBetween:
-        #for x in inBetween:
-        #  newComponent.add(x)
-          
-        #firstElement = inBetween.pop(0)
-        #print(inBetween)
-        #inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
-        #print(inBetween)
-       # print()
-      #print(newComponent)
-      #exit(0)
+    while bpp_iterator:
+      left = bpp_iterator[0]
+      rightValues = max(self.bpp_dict[left])
+      #print(left, rightValues)
+      inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
       
-      #print(bpp_iterator)
-      #bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
-      #connectedComponents.append(newComponent)
-      
-      #print(bpp_iterator)
-      #newComponent = set()  
+      while inBetween:
+        for x in inBetween:
+          newComponent.add(x)
+        firstElement = inBetween.pop(0)
+        inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
+
+      bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
+      connectedComponents.append(newComponent)
+      newComponent = set()  
     
     
-    #print(connectedComponents)
-   # exit(0)
-    with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp", 'w') as outputStream:
-      outputStream.write("Maximize\n")
-      outputStream.write("obj: ")
-      edges = []
-      #bpp_iterator = sorted(list(self.bpp_dict))
-      for start in bpp_iterator:
-        values = self.bpp_dict[start]
-        for stop, probability in values.items():
-          if stop <= start:
-            continue
-          outputStream.write(f"+ {probability} e_{start}_{stop} ")
-          edges.append(f"e_{start}_{stop}")
-      
-      outputStream.write("\nSubject To\n")
-      variableCounter = 1
-      #bpp_iterator = sorted(list(self.bpp_dict))
-      conflictCounter = 0
-      for idx, start in enumerate(bpp_iterator):
-        values = self.bpp_dict[start]
-        #if len(values) == 1:
-          #interactionPartner = list(values.keys())[0]
-          #if len(self.bpp_dict[interactionPartner]) == 1:
-            #posBetween = [x for x in range(start+1, interactionPartner) if x in self.bpp_dict]
-            #for x in posBetween:
-              #if x in self.bpp_dict:
-              #for y in self.bpp_dict[x].keys():
-                #print(start, x, y, interactionPartner)
-            #if not any([ y < start or y > interactionPartner for x in posBetween for y in self.bpp_dict[x].keys()]):
-              # outputStream.write(f"c{variableCounter}: e_{start}_{interactionPartner} = 1\n")
-              #variableCounter += 1
-              #continue
-              #print(start, interactionPartner)
-          #exit(0)
-        if len(values) != 1:
-          constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
-          outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
-          variableCounter += 1
-        
-        highest_partner = sorted(list(values), reverse=True)[0]
-        
-        for potentialConflictStart in bpp_iterator[idx:]:
-          if potentialConflictStart >= highest_partner:
-            break
-          potentialConflictValues = self.bpp_dict[potentialConflictStart]
-          for stop in values:
+    print(len(connectedComponents))
+    if any([x.intersection(y) for x,y in itertools.combinations(connectedComponents,2)]):
+      print("DAFUQ")    
+
+
+    #print([len(x) for x in connectedComponents])
+    exit(0)
+    for idx, component in enumerate(connectedComponents):
+      bpp_iterator = list(component)
+      with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure_{idx}.ilp", 'w') as outputStream:
+        outputStream.write("Maximize\n")
+        outputStream.write("obj: ")
+        edges = []
+        #bpp_iterator = sorted(list(self.bpp_dict))
+        for start in bpp_iterator:
+          values = self.bpp_dict[start]
+          for stop, probability in values.items():
             if stop <= start:
               continue
-            for potentialConflictStop in potentialConflictValues:
-              if start < potentialConflictStart < stop < potentialConflictStop:
-              #if not (start < potentialConflictStart < potentialConflictStop < stop or start < stop < potentialConflictStart < potentialConflictStop):
-                #print(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1")
-                conflictCounter += 1
-                outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
-                variableCounter += 1
+            outputStream.write(f"+ {probability} e_{start}_{stop} ")
+            edges.append(f"e_{start}_{stop}")
       
-      outputStream.write("\nBinary\n")
-      for edge in edges:
-        outputStream.write(f"{edge}\n")
-      outputStream.write("End\n")
-    return False
+        outputStream.write("\nSubject To\n")
+        variableCounter = 1
+        conflictCounter = 0
+        for idx, start in enumerate(bpp_iterator):
+          values = self.bpp_dict[start]
+          if len(values) != 1:
+            constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
+            outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
+            variableCounter += 1
+        
+          highest_partner = sorted(list(values), reverse=True)[0]
+        
+          for potentialConflictStart in bpp_iterator[idx:]:
+            if potentialConflictStart >= highest_partner:
+              break
+            potentialConflictValues = self.bpp_dict[potentialConflictStart]
+            for stop in values:
+              if stop <= start:
+                continue
+              for potentialConflictStop in potentialConflictValues:
+                if start < potentialConflictStart < stop < potentialConflictStop:
+                  conflictCounter += 1
+                  outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
+                  variableCounter += 1
+      
+        outputStream.write("\nBinary\n")
+        for edge in edges:
+          outputStream.write(f"{edge}\n")
+        outputStream.write("End\n")
+
+
+    # exit(0)
+    # with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp", 'w') as outputStream:
+    #   outputStream.write("Maximize\n")
+    #   outputStream.write("obj: ")
+    #   edges = []
+    #   #bpp_iterator = sorted(list(self.bpp_dict))
+    #   for start in bpp_iterator:
+    #     values = self.bpp_dict[start]
+    #     for stop, probability in values.items():
+    #       if stop <= start:
+    #         continue
+    #       outputStream.write(f"+ {probability} e_{start}_{stop} ")
+    #       edges.append(f"e_{start}_{stop}")
+      
+    #   outputStream.write("\nSubject To\n")
+    #   variableCounter = 1
+    #   conflictCounter = 0
+    #   for idx, start in enumerate(bpp_iterator):
+    #     values = self.bpp_dict[start]
+    #     if len(values) != 1:
+    #       constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
+    #       outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
+    #       variableCounter += 1
+        
+    #     highest_partner = sorted(list(values), reverse=True)[0]
+        
+    #     for potentialConflictStart in bpp_iterator[idx:]:
+    #       if potentialConflictStart >= highest_partner:
+    #         break
+    #       potentialConflictValues = self.bpp_dict[potentialConflictStart]
+    #       for stop in values:
+    #         if stop <= start:
+    #           continue
+    #         for potentialConflictStop in potentialConflictValues:
+    #           if start < potentialConflictStart < stop < potentialConflictStop:
+    #             conflictCounter += 1
+    #             outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
+    #             variableCounter += 1
+      
+    #   outputStream.write("\nBinary\n")
+    #   for edge in edges:
+    #     outputStream.write(f"{edge}\n")
+    #   outputStream.write("End\n")
+    
+    return(False)
         
       
   def solve_ilp(self):
     """
     """
     TRASH = open(os.devnull, 'w')
-    cmd = f"glpsol --lp {self.outdir}/tmpSequences/{self.prefix}_structure.ilp --mipgap 0.01 --pcost --cuts --memlim 16834 --tmlim 14400 -o {self.outdir}/tmpSequences/{self.prefix}_structure.ilp.sol"
-    subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
+    for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_*.ilp"):
+      bn = os.path.basename(file)
+      cmd = f"glpsol --lp {file} --mipgap 0.01 --pcost --cuts --memlim 16834 --tmlim 14400 -o {self.outdir}/tmpSequences/{bn}.sol"
+      subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
     TRASH.close()
+    
 
   def extract_used_basepairs(self):
     """
     """
-    
-    with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp.sol", 'r') as inputStream:
-      for line in inputStream:
-        line = line.strip().split()
-        if len(line) < 4: 
-          continue
-        if line[1].startswith("e_") and int(line[3]) == 1:
-          start, stop = line[1].split('_')[1:]
-          self.used_basepairs.append((int(start),int(stop)))
+    for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_*.sol"):
+      with open(file, 'r') as inputStream:
+        for line in inputStream:
+          line = line.strip().split()
+          if len(line) < 4: 
+            continue
+          if line[1].startswith("e_") and int(line[3]) == 1:
+            start, stop = line[1].split('_')[1:]
+            self.used_basepairs.append((int(start),int(stop)))
           
 
 

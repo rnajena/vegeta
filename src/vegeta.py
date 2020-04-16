@@ -276,8 +276,12 @@ def perform_alignment(seq=None):
   #    with open(goi, 'r') as inputStream:
   #      outputStream.write("".join(inputStream.readlines()))
 
+  if seq:
+    files = [seq]
+  else:
+    files = glob.glob(f"{outdir}/*_repr.fa")
   
-  for file in glob.glob(f"{outdir}/*_repr.fa"):
+  for file in files:
     prefix = os.path.splitext(os.path.basename(file))[0]
     logger.info(f"Calculating Alignment for {prefix.split('_repr')[0]}")
     virusAligner = Aligner(logger, file, proc, outdir, seedSize, shannon, structureParameter, prefix)
@@ -292,10 +296,10 @@ def perform_alignment(seq=None):
     virusAligner.refine_fragments(windowSize, stepSize)
     logger.info("Merging all fragments to a whole alignment")
     virusAligner.merge_fragments()
-    logger.info("Refined alignment calculated. Deriving final structure now!")
+    logger.info("Refined alignment calculated.")
     structure = derive_structure(prefix)
     logger.info("Saving the final alignment in STOCKHOLM format")
-    write_final_alignment(virusAligner.refinedAlignment, structure)
+    write_final_alignment(virusAligner.refinedAlignment, structure, prefix)
 
 def derive_structure(prefix):
   struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix)
@@ -309,8 +313,8 @@ def derive_structure(prefix):
   logger.info("Testing individual structural elements for significance (dinucleotide shuffling).")
   return(struc.finalStructure)
 
-def write_final_alignment(alignment, structure):
-  with open(f"{outdir}/finalAlignment.stk",'w') as outputStream:
+def write_final_alignment(alignment, structure, prefix):
+  with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
     outputStream.write("#=GF BM  VeGETA v. 0.1\n")
