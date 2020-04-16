@@ -66,7 +66,7 @@ Options:
   
 
 Version:
-  VeGETA v0.2 (alpha)
+  VeGETA v0.1 (alpha)
 """
 
 import sys
@@ -145,7 +145,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.2")
+    print("VeGETA version 0.1")
     exit(0)
 
   
