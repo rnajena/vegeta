@@ -73,6 +73,7 @@ import sys
 import os
 import logging
 import glob
+import shutil
 
 import numpy as np
 from multiprocessing import Pool
@@ -282,6 +283,12 @@ def perform_alignment(seq=None):
     files = glob.glob(f"{outdir}/*_repr.fa")
   
   for file in files:
+    
+    try:
+      os.makedirs(f"{outdir}/tmpSequences")
+    except FileExistsError:
+      pass # I always wanted to do this; except-pass == high-quality code
+
     prefix = os.path.splitext(os.path.basename(file))[0]
     logger.info(f"Calculating Alignment for {prefix.split('_repr')[0]}")
     virusAligner = Aligner(logger, file, proc, outdir, seedSize, shannon, structureParameter, prefix)
@@ -300,10 +307,13 @@ def perform_alignment(seq=None):
     structure = derive_structure(prefix)
     logger.info("Saving the final alignment in STOCKHOLM format")
     write_final_alignment(virusAligner.refinedAlignment, structure, prefix)
+    shutil.rmtree(f"{outdir}/tmpSequences")
 
 def derive_structure(prefix):
   struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix)
+  logger.info("Applying RNAalifold on alignment windows.")
   struc.apply_alifold()
+  logger.info("Parsing basepairing probabilities out of windows.")
   struc.calculate_avg_bpp()
   logger.info("Generating ILP based on all basepairing probabilities.")
   logger.info("Solving the ILP may take a while.")

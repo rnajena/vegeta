@@ -73,11 +73,14 @@ class StructCalculator(object):
       file = f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}.aln"
       cmd = f"RNAalifold --noLP -p --cfactor 0.6 --nfactor 0.5 -r --id-prefix={self.prefix}_window_{idx} {file}"
       subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
-    for file in os.listdir():
-      if file.endswith("dp.ps"):
-        shutil.move(file, f"{self.outdir}/tmpSequences/{file}")
-      elif file.endswith("out") or file.endswith("ss.ps"):
-        os.remove(file)
+      os.remove(f"{self.prefix}_window_{idx}_0001_ali.out")
+      os.remove(f"{self.prefix}_window_{idx}_0001_ss.ps")
+      shutil.move(f"{self.prefix}_window_{idx}_0001_dp.ps", f"{self.outdir}/tmpSequences/{file}")
+    # for file in os.listdir():
+    #   if file.endswith("dp.ps"):
+    #     shutil.move(file, f"{self.outdir}/tmpSequences/{file}")
+    #   elif file.endswith("out") or file.endswith("ss.ps"):
+    #     os.remove(file)
     TRASH.close()
 
 
@@ -131,7 +134,7 @@ class StructCalculator(object):
 
     for start, stop in self.used_basepairs:
       if not self.allowLP:
-        print(self.allowLP)
+        #print(self.allowLP)
         startRange = [start-1, start+1]
         stopRange = [stop-1, stop+1]
         if not (any([x in allStarts for x in startRange]) or any([x in allStops for x in stopRange])):
@@ -231,32 +234,57 @@ class ILP(object):
 
     connectedComponents = []
     newComponent = set()
-    
+
     while bpp_iterator:
-      left = bpp_iterator[0]
-      rightValues = max(self.bpp_dict[left])
-      #print(left, rightValues)
-      inBetween = [left] + [x for x in range(left, rightValues) if x in self.bpp_dict]
-      
-      while inBetween:
-        for x in inBetween:
-          newComponent.add(x)
-        firstElement = inBetween.pop(0)
-        inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent]
+      left = bpp_iterator[0]  
+      maxRight = max(self.bpp_dict[left])
+      inBetween = [left] + [x for x in range(left, maxRight) if x in self.bpp_dict]
+      currentLength = len(inBetween)
+      #print(inBetween)
+      while 1:
+        maxBPPs = [max(list(self.bpp_dict[x].keys())) for x in inBetween]
+        newMaxRight = max(maxBPPs)
+        inBetween = [left] + [x for x in range(left, newMaxRight) if x in self.bpp_dict]
 
-      bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
-      connectedComponents.append(newComponent)
-      newComponent = set()  
+        if currentLength == len(inBetween):
+          for x in inBetween:
+            newComponent.add(x)
+
+          bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
+          connectedComponents.append(newComponent)
+          newComponent = set()  
+          break
+        else:
+          currentLength = len(inBetween)
+        
+      #while inBetween:
+      #  for x in inBetween:
+      #    newComponent.add(x)
+      #  firstElement = inBetween.pop(0)
+      #  inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent and x > firstElement]
+
+      # bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
+      # connectedComponents.append(newComponent)
+      # newComponent = set()  
     
+    #print(len(connectedComponents))
+    # for x, y in itertools.combinations(connectedComponents, 2):
+    #   if x.intersection(y):
+    #     print(x)
+    #     print(y)
+    #     print(x.intersection(y))
+    #     print()
+
+
+
+    # print([len(x) for x in connectedComponents])
+    # for x in connectedComponents:
+      # if len(x) == 1:
+        # print(x)
     
-    print(len(connectedComponents))
-    if any([x.intersection(y) for x,y in itertools.combinations(connectedComponents,2)]):
-      print("DAFUQ")    
-
-
-    #print([len(x) for x in connectedComponents])
-    exit(0)
     for idx, component in enumerate(connectedComponents):
+      if len(component) == 1:
+        continue
       bpp_iterator = list(component)
       with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure_{idx}.ilp", 'w') as outputStream:
         outputStream.write("Maximize\n")
