@@ -75,7 +75,7 @@ class StructCalculator(object):
       subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
       os.remove(f"{self.prefix}_window_{idx}_0001_ali.out")
       os.remove(f"{self.prefix}_window_{idx}_0001_ss.ps")
-      shutil.move(f"{self.prefix}_window_{idx}_0001_dp.ps", f"{self.outdir}/tmpSequences/{file}")
+      shutil.move(f"{self.prefix}_window_{idx}_0001_dp.ps", f"{self.outdir}/tmpSequences/")
     # for file in os.listdir():
     #   if file.endswith("dp.ps"):
     #     shutil.move(file, f"{self.outdir}/tmpSequences/{file}")
@@ -323,7 +323,10 @@ class ILP(object):
                   conflictCounter += 1
                   outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
                   variableCounter += 1
-      
+
+        if variableCounter == 1:
+          outputStream.write(f"c{variableCounter}: {edges[0]} <= 1\n")
+
         outputStream.write("\nBinary\n")
         for edge in edges:
           outputStream.write(f"{edge}\n")
