@@ -9,7 +9,7 @@ I am not responsible for any results produced with VeGETA nor for the conclusion
 ***
 
 ### What is this about?
-RNA viruses usually exploit RNA secondary structures to regulate all kind of mechanisms and steps during the viral life-cycle. For example, earlier studies indicate that a single mutation in the 5'UTR of HCoV-229E, which disrupts a specific structural element, causes the viral replication level to decrease. Therefore we provide this pipeline to generate whole genome alignments of viruses and annotates the different regions with RNA secondary structures information. To do this in an efficient manner, we cluster sequences first and then pick representative genomes from each cluster to calculate an alignment.
+RNA viruses usually exploit RNA secondary structures to regulate all kind of mechanisms and steps during the viral life-cycle. For example, [earlier studies](https://www.sciencedirect.com/science/article/pii/S004268221730404X) indicate that a single mutation in the 5'UTR of HCoV-229E, which disrupts a specific structural element, causes the viral replication level to decrease. Therefore we provide this pipeline to generate whole genome alignments of viruses and annotates the different regions with RNA secondary structures information. To do this in an efficient manner, we cluster sequences first and then pick representative genomes from each cluster to calculate an alignment.
 
 ### What do I need?
 Simply spoken, all you need is a `.fasta` file containing your viruses and a linux OS. As usual in life, things are more complicated. You'll need to install some third party software to use VeGETA. Please refer to the [`How-To Install` section](#how-do-i-install-vegeta).
@@ -24,26 +24,34 @@ To circumvent this problem, we further provide one alignment for each of the ini
 The easiest way *at the moment* is simply following these instructions:
 
 Download the latest version of VeGETA here or clone this repository:
+
 `git clone https://github.com/klamkiew/vegeta.git`
+
 To make it as easy as possible, I highly recommend using `conda` for the next steps:
 
 Create a new conda environment with Python 3.6 (tested it with 3.7 as well, seems to work. Python 3.8 breaks with ViennaRNA though):
+
 `conda create -n vegeta python=3.6`
 
 Next, activate your newly created environment:
+
 `conda activate vegeta`
 
-And now let us install the dependencies of VeGETA. Don't worry: due to using conda, we are installing everything in our current conda environment; the rest of your system is not affected. Confused? Check our these conda webpages if you want to learn more.
+And now let us install the dependencies of VeGETA. Don't worry: due to using conda, we are installing everything in our current conda environment; the rest of your system is not affected. Confused? Check our these [conda webpages](https://docs.conda.io/en/latest/) if you want to learn more.
+
 `conda install -c conda-forge pip`
+
 `conda install -c bioconda locarna`
 
 Nearly done! [LocARNA](http://www.bioinf.uni-freiburg.de/Software/LocARNA/) needs the [ViennaRNA](https://www.tbi.univie.ac.at/RNA/) package to work. Luckily, we used conda! It already installed the supported version of ViennaRNA since it was needed for LocARNA. All that's left to do is getting some Python packages:
+
 `pip install numpy biopython colorlog umap-learn hdbscan docopt scipy`
 
 And you are all set up: Run a `vegeta.py -h` to see whether any package is missing. Seeing the help message of our pipeline? Good, then we can continue.
 
 ### How to use VeGETA
 Using VeGETA is relatively easy; simply prepare a `.fasta` file with your sequences and run the following command:
+
 `vegeta <PATH/TO/YOUR/FASTA>`
 That's it. Be aware, that this may take some time, depending on how many sequences you want to input. Experience says that you need minutes to some hours for ~100 sequences, several hours for >1.000 sequences. We broke our pipeline with 60.000 sequences, fixes are planned already, but not implemented yet.
 To give you some quality of life improvements, we'd advise using the following parameters of VeGETA:
