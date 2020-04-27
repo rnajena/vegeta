@@ -43,6 +43,8 @@ And now let us install the dependencies of VeGETA. Don't worry: due to using con
 
 `conda install -c bioconda locarna`
 
+`conda install -c conda-forge glpk`
+
 Nearly done! [LocARNA](http://www.bioinf.uni-freiburg.de/Software/LocARNA/) needs the [ViennaRNA](https://www.tbi.univie.ac.at/RNA/) package to work. Luckily, we used conda! It already installed the supported version of ViennaRNA since it was needed for LocARNA. All that's left to do is getting some Python packages:
 
 `pip install numpy biopython colorlog umap-learn hdbscan docopt scipy`
