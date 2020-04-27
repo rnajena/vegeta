@@ -63,6 +63,7 @@ To give you some quality of life improvements, we'd advise using the following p
 `-o <PATH/TO/DIR>`: Specify an output path. Per default, we simply create a new directory called `vegeta/` in your current working directory.
 
 `-c`: Only want to cluster your data? Use this parameter.
+
 `-a`: Only want the alignment and don't cluster beforehand? Use this switch.
  **DISCLAIMER**: We do not recommend using this for more than 20 sequences. First, due to runtime and memory consumption, and secondly, due to viruses being diverse. Your alignment will most likely not yield useful information.
 
