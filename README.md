@@ -57,7 +57,9 @@ That's it. Be aware, that this may take some time, depending on how many sequenc
 To give you some quality of life improvements, we'd advise using the following parameters of VeGETA:
 
 `-p <INT>`: sets the number of used processes. Per default this is 1. 
+
 `-v`: Get some more information about what is going on right now.
+
 `-o <PATH/TO/DIR>`: Specify an output path. Per default, we simply create a new directory called `vegeta/` in your current working directory.
 
 `-c`: Only want to cluster your data? Use this parameter.
