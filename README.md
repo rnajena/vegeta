@@ -23,7 +23,7 @@ To circumvent this problem, we further provide one alignment for each of the ini
 ### How do I install VeGETA?
 The easiest way *at the moment* is simply following these instructions:
 
-Download the latest version of VeGETA here or clone this repository:
+Download the latest version of VeGETA [here](https://github.com/klamkiew/vegeta/files/4538425/vegeta_0.1a.tar.gz) or clone this repository:
 
 `git clone https://github.com/klamkiew/vegeta.git`
 
