@@ -49,7 +49,7 @@ class Clusterer(object):
         'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W', 
     } 
 
-  def __init__(self, logger, sequenceFile, k, proc, subCluster=False):
+  def __init__(self, logger, sequenceFile, k, proc, outdir, subCluster=False):
     """
     """
 
@@ -58,11 +58,15 @@ class Clusterer(object):
 
     self.subCluster = subCluster
     self.sequenceFile = sequenceFile
-
+    self.outdir = outdir
     if not self.subCluster:
-      self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
+      #self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
+      self.reducedSequences = f"{self.outdir}/reduced.fasta"
     else:
-      self.reducedSequences = sequenceFile
+      #if os.path.dirname(sequenceFile) == self.outdir:
+      #  self.reducedSequences = sequenceFile
+      #else:
+      self.reducedSequences = f"{self.outdir}/{os.path.basename(sequenceFile)}"
     
     self.k = k
 
@@ -170,7 +174,7 @@ class Clusterer(object):
     return (seq1, seq2, distance)
     #       
 
-  def apply_umap(self, outdir):
+  def apply_umap(self):
     """
     """
     profiles = [(idx,profile) for idx, profile in Clusterer.d_profiles.items() if idx in self.d_sequences]
@@ -201,15 +205,15 @@ class Clusterer(object):
       #logger.warn(f"Too few sequences for clustering. Taking all sequences of {os.path.basename(self.sequenceFile)} for then alignment.")
       #print("Too few sequences for clustering. Taking the original input for the alignment.")
       import shutil
-      shutil.copyfile(self.sequenceFile, f'{outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa')
+      shutil.copyfile(self.sequenceFile, f'{self.outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa')
       return 1
 
     self.allCluster = list(zip([x[0] for x in profiles], self.clusterlabel))
 
     if not self.subCluster:
-      with open(f'{outdir}/cluster.txt', 'w') as outStream:
+      with open(f'{self.outdir}/cluster.txt', 'w') as outStream:
         for i in set(self.clusterlabel):
-          with open(f'{outdir}/cluster{i}.fa', 'w') as fastaOut:
+          with open(f'{self.outdir}/cluster{i}.fa', 'w') as fastaOut:
             outStream.write(f"Cluster: {i}\n")
             for idx, label in self.allCluster:
               if label == i:
@@ -218,7 +222,7 @@ class Clusterer(object):
           outStream.write("\n")
 
 
-  def get_centroids(self, outdir, proc):
+  def get_centroids(self, proc):
     """
     """
     seqCluster = { x : [] for x in set(self.clusterlabel)}
@@ -268,7 +272,7 @@ class Clusterer(object):
     p.join()
 
 
-  def split_centroids(self, outdir):
+  def split_centroids(self):
     """
     """
     
@@ -299,7 +303,7 @@ class Clusterer(object):
     #if not self.subCluster:
     #  outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.reducedSequences))[0]}_repr.fa'
     #else:
-    outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa'
+    outputPath = f'{self.outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa'
 
     with open(outputPath, 'w') as outStream:
       for centroidID, sequence in reprSeqs.items():

@@ -43,8 +43,6 @@ Options:
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
   -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
-  --cutoff CUTOFF                         Cutoff threshold for the initial graph during clustering. The larger the value the more relationships are
-                                          neglected for clustering, despite being closely related. [Default: 0.3]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
 
   -a, --alignment-only                    Only performs the alignment calculation, without prior clustering. 
@@ -228,18 +226,18 @@ def parse_arguments(d_args):
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(logger, inputSequences, k, proc)
+  virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir)
   logger.info("Removing 100% identical sequences.")
   virusClusterer.remove_redundancy()
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
-  virusClusterer.apply_umap(outdir)
+  virusClusterer.apply_umap()
   clusterInfo = virusClusterer.clusterlabel
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
   logger.info("Extracting centroid sequences and writing results to file.\n")
-  virusClusterer.get_centroids(outdir, multiPool)
-  virusClusterer.split_centroids(outdir)
+  virusClusterer.get_centroids(multiPool)
+  virusClusterer.split_centroids()
 
   
   
@@ -252,15 +250,15 @@ def perform_clustering():
   for file in glob.glob(f"{outdir}/cluster*.fa"):
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
-    virusSubClusterer = Clusterer(logger, file, k, proc, subCluster=True)
+    virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
     virusSubClusterer.d_sequences = virusSubClusterer.read_sequences()
-    code = virusSubClusterer.apply_umap(outdir)
+    code = virusSubClusterer.apply_umap()
     if code == 1:
       logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
       del virusSubClusterer
       continue
-    virusSubClusterer.get_centroids(outdir, multiPool)
-    virusSubClusterer.split_centroids(outdir)
+    virusSubClusterer.get_centroids(multiPool)
+    virusSubClusterer.split_centroids()
     del virusSubClusterer
 
 def perform_alignment(seq=None):
