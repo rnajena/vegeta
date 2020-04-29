@@ -41,6 +41,8 @@ And now let us install the dependencies of VeGETA. Don't worry: due to using con
 
 `conda install -c conda-forge pip`
 
+`conda install -c bioconda cd-hit`
+
 `conda install -c bioconda locarna`
 
 `conda install -c conda-forge glpk`
