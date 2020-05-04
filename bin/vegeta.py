@@ -64,7 +64,7 @@ Options:
   
 
 Version:
-  VeGETA v0.1 (alpha)
+  VeGETA v0.2 (alpha)
 """
 
 import sys
@@ -144,7 +144,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.1")
+    print("VeGETA version 0.2")
     exit(0)
 
   
@@ -333,7 +333,7 @@ def write_final_alignment(alignment, structure, prefix):
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
-    outputStream.write("#=GF BM  VeGETA v. 0.1\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.2\n")
     outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
     
     for record in alignment:
