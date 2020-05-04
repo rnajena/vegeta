@@ -47,25 +47,23 @@ class Clusterer(object):
         'TTC':'F', 'TTT':'F', 'TTA':'L', 'TTG':'L', 
         'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*', 
         'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W', 
-    } 
+    }
 
-  def __init__(self, logger, sequenceFile, k, proc, outdir, subCluster=False):
+  genomeOfInterest = ''
+  goiHeader = []
+  goi2Cluster = {}
+
+  def __init__(self, logger, sequenceFile, k, proc, outdir, subCluster=False, goi=""):
     """
     """
-
-
-   # self.logger = logger
 
     self.subCluster = subCluster
     self.sequenceFile = sequenceFile
     self.outdir = outdir
     if not self.subCluster:
-      #self.reducedSequences = f"{os.path.realpath(os.path.dirname(self.sequenceFile))}/reduced.fasta"
       self.reducedSequences = f"{self.outdir}/reduced.fasta"
     else:
-      #if os.path.dirname(sequenceFile) == self.outdir:
-      #  self.reducedSequences = sequenceFile
-      #else:
+
       self.reducedSequences = f"{self.outdir}/{os.path.basename(sequenceFile)}"
     
     self.k = k
@@ -79,6 +77,9 @@ class Clusterer(object):
     self.allCluster = []
     self.clusterlabel = []
     self.probabilities = []
+
+    if goi:
+      Clusterer.genomeOfInterest = goi
 
   def rev_comp(self, sequence):
     """
@@ -95,14 +96,11 @@ class Clusterer(object):
     self.d_sequences = self.read_sequences()
     TRASH.close()
 
-  def read_sequences(self):
+  def __parse_fasta(self, filePath, goi=False):
     """
     """
-    fastaContent = {}
-    idHead = -1
-    
-    #print(f"Reading {self.reducedSequences}")
-    with open(self.reducedSequences, 'r') as inputStream:
+
+    with open(filePath, 'r') as inputStream:
       header = ''
       seq = ''
 
@@ -110,31 +108,42 @@ class Clusterer(object):
         if line.startswith(">"):
           if header:
             seq = seq + "X"*10 + self.rev_comp(seq)
-            #if not seq in uniqueSeqs:
-            if not self.subCluster:
-              Clusterer.id2header[idHead] = header
-              Clusterer.header2id[header] = idHead
-              fastaContent[idHead] = seq
-            else:
-              fastaContent[Clusterer.header2id[header]] = seq
+            yield (header, seq)
+
           header = line.rstrip("\n").replace(':','_').replace(' ','_').lstrip(">")
           seq = ''
-          idHead += 1
         else:
           seq += line.rstrip("\n").upper().replace('U','T')
 
       seq = seq + "X"*10 + self.rev_comp(seq)
-      
+      yield (header, seq)
+
+  def read_sequences(self):
+    """
+    """
+    idHead = -1
+    fastaContent = {}
+    for header, sequence in self.__parse_fasta(self.reducedSequences):
       if not self.subCluster:
+        idHead += 1
         Clusterer.id2header[idHead] = header
         Clusterer.header2id[header] = idHead
-        fastaContent[idHead] = seq
+        fastaContent[idHead] = sequence
       else:
-        fastaContent[Clusterer.header2id[header]] = seq
+        fastaContent[Clusterer.header2id[header]] = sequence
+    
+    if Clusterer.genomeOfInterest and not self.subCluster:
+      for header, sequence in self.__parse_fasta(Clusterer.genomeOfInterest):
+          idHead += 1
+          Clusterer.goiHeader.append(idHead)
+          Clusterer.id2header[idHead] = header
+          Clusterer.header2id[header] = idHead
+          fastaContent[idHead] = sequence
 
     if not self.subCluster:      
       Clusterer.dim = len(fastaContent)
       Clusterer.matrix = np.zeros(shape=(Clusterer.dim, Clusterer.dim), dtype=float)
+
     return fastaContent
 
 
@@ -202,8 +211,6 @@ class Clusterer(object):
       self.probabilities = clusterer.probabilities_
 
     except TypeError:
-      #logger.warn(f"Too few sequences for clustering. Taking all sequences of {os.path.basename(self.sequenceFile)} for then alignment.")
-      #print("Too few sequences for clustering. Taking the original input for the alignment.")
       import shutil
       shutil.copyfile(self.sequenceFile, f'{self.outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa')
       return 1
@@ -217,6 +224,8 @@ class Clusterer(object):
             outStream.write(f"Cluster: {i}\n")
             for idx, label in self.allCluster:
               if label == i:
+                if idx in Clusterer.goiHeader:
+                  Clusterer.goi2Cluster[Clusterer.id2header[idx]] = i
                 outStream.write(f"{Clusterer.id2header[idx]}\n")
                 fastaOut.write(f">{Clusterer.id2header[idx]}\n{self.d_sequences[idx].split('X'*10)[0]}\n")
           outStream.write("\n")
@@ -234,7 +243,10 @@ class Clusterer(object):
 
     for cluster, sequences in seqCluster.items():
       if cluster == -1:
-        continue
+        for sequence in sequences:
+          if sequence in Clusterer.goiHeader:
+            self.centroids.append(sequence)
+        continue #print(sequence)
 
       subProfiles = {seq : profile for seq, profile in Clusterer.d_profiles.items() if seq in sequences}
 
@@ -254,6 +266,11 @@ class Clusterer(object):
     
       for sequence in sequences:
         averagedDistance = 0
+
+        if sequence in Clusterer.goiHeader:
+          #print(Clusterer.goiHeader)
+          self.centroids.append(sequence)
+          continue
 
         for neighborSequence in sequences:
           if sequence == neighborSequence:
@@ -301,6 +318,7 @@ class Clusterer(object):
       reprSeqs[centroidID] = positiveStrand 
     
     #if not self.subCluster:
+      
     #  outputPath = f'{outdir}/{os.path.splitext(os.path.basename(self.reducedSequences))[0]}_repr.fa'
     #else:
     outputPath = f'{self.outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa'

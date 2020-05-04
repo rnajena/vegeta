@@ -226,27 +226,34 @@ def parse_arguments(d_args):
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir)
+  virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
   logger.info("Removing 100% identical sequences.")
   virusClusterer.remove_redundancy()
+  logger.info("Sequences are all parsed.")
+  if goi:
+    logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
   virusClusterer.apply_umap()
   clusterInfo = virusClusterer.clusterlabel
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
+
+  goiCluster = virusClusterer.goi2Cluster
+  if goiCluster:
+    for header, cluster in goiCluster.items():
+      logger.info(f"You find the genome {header} in cluster {cluster}.")
+
   logger.info("Extracting centroid sequences and writing results to file.\n")
   virusClusterer.get_centroids(multiPool)
   virusClusterer.split_centroids()
-
-  
   
   logger.info(f"Extracting representative sequences for each cluster.")
   sequences = virusClusterer.d_sequences
   distanceMatrix = virusClusterer.matrix
   profiles = virusClusterer.d_profiles
-  #virusClusterer.create_subcluster()
   del virusClusterer
+
   for file in glob.glob(f"{outdir}/cluster*.fa"):
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
