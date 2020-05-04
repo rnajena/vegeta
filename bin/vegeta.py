@@ -322,6 +322,7 @@ def derive_structure(prefix):
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure, prefix):
+  longestID = max([len(x.id) for x in alignment])
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
@@ -330,8 +331,10 @@ def write_final_alignment(alignment, structure, prefix):
     
     for record in alignment:
     #for header, sequence in alignment.items():
-      outputStream.write(f"{record.id}\t\t{record.seq}\n")
-    outputStream.write(f"#=GC SS_cons\t\t{structure}\n")
+      spacesToFill = longestID - len(record.id) + 5
+      outputStream.write(f"{record.id}{' '*spacesToFill}{record.seq}\n")
+    spacesToFill = longestID - len('#=GC SS_cons') + 5
+    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n")
 
   #virusAligner.calculate_pw_distances()
   #virusAligner.get_tree_from_dist()
