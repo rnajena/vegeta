@@ -101,7 +101,7 @@ Yup, we are aware of this issue. The problem comes from multiprocessing large am
 High Priority
 * Fix known bugs
 * Implement a dinucleotide shuffle for significance [#5](https://github.com/klamkiew/vegeta/issues/5)
-* Allow a sequence of interest to be present the whole time [#6](https://github.com/klamkiew/vegeta/issues/6)
+* <s>Allow a sequence of interest to be present the whole time [#6](https://github.com/klamkiew/vegeta/issues/6)</s>
 
 Medium Priority
 * Improve code documentation
