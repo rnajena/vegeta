@@ -223,19 +223,33 @@ def parse_arguments(d_args):
 
   return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP)
 
+def __abort_cluster(clusterObject, filename):
+    logger.warn(f"Too few sequences for clustering in {os.path.basename(filename)}. Alignment will be calculated with all sequences of this cluster.")
+    del clusterObject
+
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
   virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
+
   logger.info("Removing 100% identical sequences.")
-  virusClusterer.remove_redundancy()
+  code = virusClusterer.remove_redundancy()
   logger.info("Sequences are all parsed.")
+
+  if code == 1:
+    __abort_cluster(virusClusterer, inputSequences)
+    return 0
+
   if goi:
     logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
-  virusClusterer.apply_umap()
+  code = virusClusterer.apply_umap()
+  if code == 1:
+    __abort_cluster(virusClusterer, inputSequences)
+    #logger.warning(f"All sequences fall into one cluster. Aligning this one without dividing the sequences anymore.")
+    return 0
   clusterInfo = virusClusterer.clusterlabel
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
 
@@ -258,12 +272,22 @@ def perform_clustering():
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
     virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
-    virusSubClusterer.d_sequences = virusSubClusterer.read_sequences()
-    code = virusSubClusterer.apply_umap()
+    code = virusSubClusterer.remove_redundancy()
+    
     if code == 1:
-      logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-      del virusSubClusterer
+      __abort_cluster(virusSubClusterer, file)
+      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+      #del virusSubClusterer
       continue
+
+    code = virusSubClusterer.apply_umap()
+    
+    if code == 1:
+      __abort_cluster(virusSubClusterer, file)
+      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+      #del virusSubClusterer
+      continue
+
     virusSubClusterer.get_centroids(multiPool)
     virusSubClusterer.split_centroids()
     del virusSubClusterer
