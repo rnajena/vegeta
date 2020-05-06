@@ -13,11 +13,14 @@ import subprocess
 import shutil
 import glob
 import math
+import random
 import itertools
 
 import numpy as np
-from Bio import AlignIO
+from scipy.stats import norm
+from scipy.stats.mstats import zscore
 
+from Bio import AlignIO
 import RNA
 
 class StructCalculator(object):
@@ -120,8 +123,72 @@ class StructCalculator(object):
     """
     ilp = ILP(self.bpps, self.outdir, self.prefix)
     self.used_basepairs = ilp.used_basepairs
-    print(sorted(self.used_basepairs))
-    exit(0)
+    #print(sorted(self.used_basepairs))
+    #exit(0)
+
+  def __rna_alifold(self, query):
+    """
+    Wrapper for the ViennaRNA API method fold_compound().
+    The ribosum_scoring and noLP parameters are set to 1 first, then the sequence (or alignment)
+    is folded. Furthermore, the covariance of the mfe structure is calculated.
+    rna_alifold() returns the mfe, the covariance score and the structure itself.
+
+    Keyword arguments:
+    ary -- the query (either sequence or alignment) that has to be folded.
+    """
+    if all([len(x) == 0 for x in query]):
+        #logger.warn("Found an empty alignment window.")
+        return[10,0,'']
+        
+    RNA.cvar.ribo = 1
+    RNA.cvar.noLP = 1
+    fc = RNA.fold_compound(query)
+
+    structure, mfe = fc.mfe()
+    covar = fc.eval_covar_structure(structure)
+    return [mfe, covar, structure]
+
+  def __soft_shuffle(self, aln, shuffle):
+    """
+    Soft shuffles a given alignment aln and calculates the z-score based p-value
+    for the energy of the consensus sequence. The soft shuffle applies at least 0.1*len(aln) and
+    at most 0.4*len(aln) changes to the alignment.
+
+    Keyword arguments:
+    aln -- query alignment that has to be shuffled
+    mfe -- the mfe of the corresponding consensus secondary structure
+    covar -- covariance score of the corresponding consensus secondary structure
+    shuffle -- determines how many different sequences are generated
+    """
+    aln = [str(x.seq) for x in aln]
+    mfe, covar, structure = self.__rna_alifold(aln)
+    aln = list(map(list, aln))
+
+    wi = len(aln[0])
+    min_shuffle = int(wi * 0.1)
+    
+    mfes = [mfe - covar]
+
+    for i in range(0, shuffle):
+        # print("z: {}".format(i))
+        k = random.randint(min_shuffle, min_shuffle + int((wi - min_shuffle) * 0.45))
+        ary = np.array(aln).T
+
+        for j in range(0, k):
+            p = random.sample(range(wi), 2)
+            tmp = np.copy(ary[p[0]])
+            ary[p[0]] = ary[p[1]]
+            ary[p[1]] = tmp
+
+        new_ary = list(map("".join, ary.T))
+        mfe, covar, structure = self.__rna_alifold(new_ary)
+        mfes.append(mfe - covar)
+
+    a = np.array(mfes)
+    z = zscore(a)[0]
+    p_values = norm.sf(abs(z)) * 2
+
+    return z, p_values
 
   def finalize_structure(self):
     """
@@ -140,7 +207,7 @@ class StructCalculator(object):
         continue
       structure[start] = '('
       structure[stop] = ')'
-      self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
+      #self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
     
     localStructures = []
     currentStructure = []
@@ -156,17 +223,25 @@ class StructCalculator(object):
         currentStructure.pop()
         if not currentStructure:
           localStructures.append((start, idx))
-
+    np.seterr(all='ignore')
     for start, stop in localStructures:
-      print(start, stop)
-      print(self.finalStructure[start:stop+1])
-      print(self.finalStructure[start:stop+1].count('('), self.finalStructure[start:stop+1].count(')'))
+      fragment = self.alignment[:, start:stop+1]
+      #print(self.finalStructure[start:stop+1])
+      zscore, pvalue = self.__soft_shuffle(fragment, 1000)
+      if pvalue > 0.05:
+        for i in range(start,stop+1):
+          structure[i] = '.'
+      #exit(0)
+      #print(start, stop)
+      #print(self.finalStructure[start:stop+1].count('('), self.finalStructure[start:stop+1].count(')'))
     
-    print()
-    print(self.finalStructure[stop+1:])
-    print(self.finalStructure[stop+1:].count('('), self.finalStructure[stop+1:].count(')'))
-    exit(0)
-    
+    #print()
+    #print(self.finalStructure[stop+1:])
+    #print(self.finalStructure[stop+1:].count('('), self.finalStructure[stop+1:].count(')'))
+    #print()
+    self.finalStructure = ''.join(structure)
+    #print(self.finalStructure)
+    #exit(0)
 
 class ILP(object):
   """
@@ -250,6 +325,7 @@ class ILP(object):
           values = self.bpp_dict[start]
           for stop, probability in values.items():
             if stop <= start or stop-start < 4:
+              #print(f"e_{start}_{stop}")
               continue
             outputStream.write(f"+ {probability} e_{start}_{stop} ")
             edges.append(f"e_{start}_{stop}")
@@ -257,12 +333,20 @@ class ILP(object):
         outputStream.write("\nSubject To\n")
         variableCounter = 1
         conflictCounter = 0
+
+        for edge in edges:
+          start = edge.split('_')[1]
+          stop = edge.split('_')[2]
+          outputStream.write(f"c{variableCounter}: e_{start}_{stop} - e_{stop}_{start} = 0\n")
+          variableCounter += 1
+
         for idx, start in enumerate(bpp_iterator):
           values = self.bpp_dict[start]
           if len(values) != 1:
-            constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
-            outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
-            variableCounter += 1
+            constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)]) #if f'e_{start}_{x}' in edges])
+            if constraint:
+              outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
+              variableCounter += 1
         
           highest_partner = sorted(list(values), reverse=True)[0]
         

@@ -179,6 +179,7 @@ def parse_arguments(d_args):
   except ValueError:
     logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
+
   if not (0 <= tbpp <= 1):
     logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
@@ -347,9 +348,9 @@ def derive_structure(prefix):
   logger.info("Generating ILP based on all basepairing probabilities.")
   logger.info("Solving the ILP may take a while.")
   struc.generate_ilp()
-  logger.info("Deriving structural elements from ILP solution.")
+  logger.info("Deriving structural elements from ILP solution and\ntesting individual structural elements for significance (nucleotide shuffling).")
+  #logger.info("testing individual structural elements for significance (nucleotide shuffling).")
   struc.finalize_structure()
-  logger.info("Testing individual structural elements for significance (dinucleotide shuffling).")
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure, prefix):
