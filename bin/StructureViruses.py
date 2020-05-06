@@ -27,7 +27,7 @@ class StructCalculator(object):
   """
   """
 
-  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix):
+  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix, shuffle, pvalue):
     """
     """
     self.logger = logger
@@ -39,6 +39,8 @@ class StructCalculator(object):
     self.proc = proc
     self.path = path
     self.tbpp = tbpp
+    self.shuffle = shuffle
+    self.pvalue = pvalue
     self.alignment = self.__read_alignment(path)
     self.alnLength = self.alignment.get_alignment_length()
     self.finalStructure = '.' * self.alnLength
@@ -139,7 +141,7 @@ class StructCalculator(object):
     if all([len(x) == 0 for x in query]):
         #logger.warn("Found an empty alignment window.")
         return[10,0,'']
-        
+
     RNA.cvar.ribo = 1
     RNA.cvar.noLP = 1
     fc = RNA.fold_compound(query)
@@ -227,8 +229,8 @@ class StructCalculator(object):
     for start, stop in localStructures:
       fragment = self.alignment[:, start:stop+1]
       #print(self.finalStructure[start:stop+1])
-      zscore, pvalue = self.__soft_shuffle(fragment, 1000)
-      if pvalue > 0.05:
+      zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
+      if pvalue > self.pvalue:
         for i in range(start,stop+1):
           structure[i] = '.'
       #exit(0)

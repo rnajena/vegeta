@@ -59,12 +59,17 @@ Options:
                                           it isn't considered during ILP construction. [Default: 0.7]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
-  --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
+
+  --allowLP                               NOT IMPLEMENTED COMPLETELY YET -- If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
                                           into the final structure. [Default: False]
   
+  --shuffle SHUFFLE                       Number of sampled sequences created for each structural element; required for 
+                                          significance testing (z-score analyses). [Default: 500]
+  --pvalue PVALUE                         p-Value threshold whether a structure gets accepted or not in the final solution
+                                          based on its z-score analyses. [Default: 0.05]
 
 Version:
-  VeGETA v0.2 (alpha)
+  VeGETA v0.3 (alpha)
 """
 
 import sys
@@ -144,7 +149,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.2")
+    print("VeGETA version 0.3")
     exit(0)
 
   
@@ -208,6 +213,23 @@ def parse_arguments(d_args):
     logger.error("Invalid number for the shannon entropy cutoff threshold. Please input a number higher than 0.0.")
     exit(2)
 
+  try:
+    shuffle = int(d_args['--shuffle'])
+  except ValueError:
+    logger.error("Invalid number for the number of shuffle events. Please input a number higher than 0.")
+    exit(2)
+
+  try:
+    pvalue = float(d_args['--pvalue'])
+  except ValueError:
+    logger.error("Invalid number for the p-value threshold. Please input a number between 0.0 and 1.0")
+    exit(2)
+
+  if not (0 <= pvalue <= 1):
+    logger.error("Invalid number for the p-value threshold. Please input a number between 0.0 and 1.0")
+    exit(2)
+
+
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
@@ -222,7 +244,7 @@ def parse_arguments(d_args):
   allowLP = d_args['--allowLP']
 
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
 
 def __abort_cluster(clusterObject, filename):
     logger.warn(f"Too few sequences for clustering in {os.path.basename(filename)}. Alignment will be calculated with all sequences of this cluster.")
@@ -340,7 +362,7 @@ def perform_alignment(seq=None):
     shutil.rmtree(f"{outdir}/tmpSequences")
 
 def derive_structure(prefix):
-  struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix)
+  struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix, shuffle, pvalue)
   logger.info("Applying RNAalifold on alignment windows.")
   struc.apply_alifold()
   logger.info("Parsing basepairing probabilities out of windows.")
@@ -348,7 +370,7 @@ def derive_structure(prefix):
   logger.info("Generating ILP based on all basepairing probabilities.")
   logger.info("Solving the ILP may take a while.")
   struc.generate_ilp()
-  logger.info("Deriving structural elements from ILP solution and\ntesting individual structural elements for significance (nucleotide shuffling).")
+  logger.info("Deriving structural elements from ILP solution and testing individual structural elements for significance (nucleotide shuffling).")
   #logger.info("testing individual structural elements for significance (nucleotide shuffling).")
   struc.finalize_structure()
   return(struc.finalStructure)
@@ -358,15 +380,15 @@ def write_final_alignment(alignment, structure, prefix):
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
-    outputStream.write("#=GF BM  VeGETA v. 0.2\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.3\n")
     outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
     
     for record in alignment:
     #for header, sequence in alignment.items():
       spacesToFill = longestID - len(record.id) + 5
-      outputStream.write(f"{record.id}{' '*spacesToFill}{record.seq}\n")
+      outputStream.write(f"{record.id}{' '*spacesToFill}{str(record.seq).replace('T','U')}\n")
     spacesToFill = longestID - len('#=GC SS_cons') + 5
-    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n")
+    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n\\\n")
 
   #virusAligner.calculate_pw_distances()
   #virusAligner.get_tree_from_dist()
@@ -377,9 +399,9 @@ def write_final_alignment(alignment, structure, prefix):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
 
-  structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp)
+  structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, shuffle, pvalue)
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
