@@ -41,7 +41,7 @@ class Aligner(object):
     self.alignment = ""
     self.seeds = {}
     self.nonSeeds = {}
-    self.structureParameter = structureParameter 
+    #self.structureParameter = structureParameter 
     self.refinedAlignment = []
     self.prefix = prefix
     

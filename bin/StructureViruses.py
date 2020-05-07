@@ -13,18 +13,21 @@ import subprocess
 import shutil
 import glob
 import math
+import random
 import itertools
 
 import numpy as np
-from Bio import AlignIO
+from scipy.stats import norm
+from scipy.stats.mstats import zscore
 
+from Bio import AlignIO
 import RNA
 
 class StructCalculator(object):
   """
   """
 
-  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix):
+  def __init__(self, path, logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix, shuffle, pvalue):
     """
     """
     self.logger = logger
@@ -36,6 +39,8 @@ class StructCalculator(object):
     self.proc = proc
     self.path = path
     self.tbpp = tbpp
+    self.shuffle = shuffle
+    self.pvalue = pvalue
     self.alignment = self.__read_alignment(path)
     self.alnLength = self.alignment.get_alignment_length()
     self.finalStructure = '.' * self.alnLength
@@ -76,11 +81,6 @@ class StructCalculator(object):
       os.remove(f"{self.prefix}_window_{idx}_0001_ali.out")
       os.remove(f"{self.prefix}_window_{idx}_0001_ss.ps")
       shutil.move(f"{self.prefix}_window_{idx}_0001_dp.ps", f"{self.outdir}/tmpSequences/")
-    # for file in os.listdir():
-    #   if file.endswith("dp.ps"):
-    #     shutil.move(file, f"{self.outdir}/tmpSequences/{file}")
-    #   elif file.endswith("out") or file.endswith("ss.ps"):
-    #     os.remove(file)
     TRASH.close()
 
 
@@ -125,71 +125,125 @@ class StructCalculator(object):
     """
     ilp = ILP(self.bpps, self.outdir, self.prefix)
     self.used_basepairs = ilp.used_basepairs
+    #print(sorted(self.used_basepairs))
+    #exit(0)
+
+  def __rna_alifold(self, query):
+    """
+    Wrapper for the ViennaRNA API method fold_compound().
+    The ribosum_scoring and noLP parameters are set to 1 first, then the sequence (or alignment)
+    is folded. Furthermore, the covariance of the mfe structure is calculated.
+    rna_alifold() returns the mfe, the covariance score and the structure itself.
+
+    Keyword arguments:
+    ary -- the query (either sequence or alignment) that has to be folded.
+    """
+    if all([len(x) == 0 for x in query]):
+        #logger.warn("Found an empty alignment window.")
+        return[10,0,'']
+
+    RNA.cvar.ribo = 1
+    RNA.cvar.noLP = 1
+    fc = RNA.fold_compound(query)
+
+    structure, mfe = fc.mfe()
+    covar = fc.eval_covar_structure(structure)
+    return [mfe, covar, structure]
+
+  def __soft_shuffle(self, aln, shuffle):
+    """
+    Soft shuffles a given alignment aln and calculates the z-score based p-value
+    for the energy of the consensus sequence. The soft shuffle applies at least 0.1*len(aln) and
+    at most 0.4*len(aln) changes to the alignment.
+
+    Keyword arguments:
+    aln -- query alignment that has to be shuffled
+    mfe -- the mfe of the corresponding consensus secondary structure
+    covar -- covariance score of the corresponding consensus secondary structure
+    shuffle -- determines how many different sequences are generated
+    """
+    aln = [str(x.seq) for x in aln]
+    mfe, covar, structure = self.__rna_alifold(aln)
+    aln = list(map(list, aln))
+
+    wi = len(aln[0])
+    min_shuffle = int(wi * 0.1)
+    
+    mfes = [mfe - covar]
+
+    for i in range(0, shuffle):
+        # print("z: {}".format(i))
+        k = random.randint(min_shuffle, min_shuffle + int((wi - min_shuffle) * 0.45))
+        ary = np.array(aln).T
+
+        for j in range(0, k):
+            p = random.sample(range(wi), 2)
+            tmp = np.copy(ary[p[0]])
+            ary[p[0]] = ary[p[1]]
+            ary[p[1]] = tmp
+
+        new_ary = list(map("".join, ary.T))
+        mfe, covar, structure = self.__rna_alifold(new_ary)
+        mfes.append(mfe - covar)
+
+    a = np.array(mfes)
+    z = zscore(a)[0]
+    p_values = norm.sf(abs(z)) * 2
+
+    return z, p_values
 
   def finalize_structure(self):
     """
     """
     allStarts = [x[0] for x in self.used_basepairs]
     allStops = [x[1] for x in self.used_basepairs]
+    structure = list(self.finalStructure)
 
     for start, stop in self.used_basepairs:
       if not self.allowLP:
-        #print(self.allowLP)
         startRange = [start-1, start+1]
         stopRange = [stop-1, stop+1]
         if not (any([x in allStarts for x in startRange]) or any([x in allStops for x in stopRange])):
-          if stop-start >= 20:
-            continue
-
-      self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
+          continue
+      if stop-start < 4: 
+        continue
+      structure[start] = '('
+      structure[stop] = ')'
+      #self.finalStructure = self.finalStructure[:start] + '(' + self.finalStructure[start+1:stop] + ')' + self.finalStructure[stop+1:]
     
-    #print(self.used_basepairs)
+    localStructures = []
+    currentStructure = []
+
+    for idx, char in enumerate(structure):
+      if char == '(':
+        #print(currentStructure)
+        if not currentStructure:
+          start = idx
+        currentStructure.append(idx)
+      if char == ')':
+        #print(currentStructure)
+        currentStructure.pop()
+        if not currentStructure:
+          localStructures.append((start, idx))
+    np.seterr(all='ignore')
+    for start, stop in localStructures:
+      fragment = self.alignment[:, start:stop+1]
+      #print(self.finalStructure[start:stop+1])
+      zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
+      if pvalue > self.pvalue:
+        for i in range(start,stop+1):
+          structure[i] = '.'
+      #exit(0)
+      #print(start, stop)
+      #print(self.finalStructure[start:stop+1].count('('), self.finalStructure[start:stop+1].count(')'))
+    
+    #print()
+    #print(self.finalStructure[stop+1:])
+    #print(self.finalStructure[stop+1:].count('('), self.finalStructure[stop+1:].count(')'))
+    #print()
+    self.finalStructure = ''.join(structure)
     #print(self.finalStructure)
-
-  # def apply_lalifold(self):
-  #   """
-  #   """
-
-  #   cmd = f"RNALalifold --noLP --cfactor 0.6 --nfactor 0.5 -r -L {self.windowSize} {self.path}"
-  #   lalifoldResult = subprocess.getoutput(cmd)
-  #   structureWindows = {}
-  #   windows = lalifoldResult.split("\n")[1:-1]
-  #   for structure in windows:
-  #     structure = structure.split()
-  #     start = int(structure[-3])
-  #     structureWindows[start] = structure[0]
-
-  #   #nonOverlap = {}
-  #   lastStart = -1
-  #   lastStop = -1
-    
-  #   #print(structureWindows)
-  #   for start in sorted(list(structureWindows)):
-  #     if lastStart < start <= lastStop:
-  #       self.nonOverlap[lastStart] = start + len(structureWindows[start]) -1
-  #     else:
-  #       self.nonOverlap[start] = start + len(structureWindows[start]) -1
-  #       lastStart = start
-  #     lastStop = start + len(structureWindows[start]) -1
-
-    
-  #   lastStart = -1
-  #   lastStop = -1
-  #   sortedStarts = sorted(list(self.nonOverlap))
-  #   for idx, start in enumerate(sortedStarts):
-  #     stop = self.nonOverlap[start]
-  #     if start - 20 < 0:
-  #       start = 0
-  #     else:
-  #       start = start - 20
-      
-  #     if stop + 20 >= self.alnLength:
-  #       stop = self.alnLength
-  #     else:
-  #       stop = stop + 20
-
-  #    # print(self.alignment[:, start:stop])
-
+    #exit(0)
 
 class ILP(object):
   """
@@ -230,7 +284,7 @@ class ILP(object):
     if not filteredBPPs:
       return(True)
     bpp_iterator = sorted(list(filteredBPPs))
-
+    
 
     connectedComponents = []
     newComponent = set()
@@ -238,50 +292,28 @@ class ILP(object):
     while bpp_iterator:
       left = bpp_iterator[0]  
       maxRight = max(self.bpp_dict[left])
-      inBetween = [left] + [x for x in range(left, maxRight) if x in self.bpp_dict]
+      #inBetween = [left] + [x for x in range(left, maxRight) if x in self.bpp_dict]
+      inBetween = [left] + [x for x in range(left, maxRight) if x in filteredBPPs]
       currentLength = len(inBetween)
       #print(inBetween)
       while 1:
         maxBPPs = [max(list(self.bpp_dict[x].keys())) for x in inBetween]
         newMaxRight = max(maxBPPs)
-        inBetween = [left] + [x for x in range(left, newMaxRight) if x in self.bpp_dict]
+        #inBetween = [left] + [x for x in range(left, newMaxRight) if x in self.bpp_dict]
+        inBetween = [left] + [x for x in range(left, newMaxRight) if x in filteredBPPs]
 
         if currentLength == len(inBetween):
           for x in inBetween:
             newComponent.add(x)
 
           bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
-          connectedComponents.append(newComponent)
+          connectedComponents.append(sorted(newComponent))
           newComponent = set()  
           break
         else:
           currentLength = len(inBetween)
-        
-      #while inBetween:
-      #  for x in inBetween:
-      #    newComponent.add(x)
-      #  firstElement = inBetween.pop(0)
-      #  inBetween = inBetween + [x for x in self.bpp_dict[firstElement] if x not in newComponent and x > firstElement]
-
-      # bpp_iterator = [x for x in bpp_iterator if x not in newComponent]
-      # connectedComponents.append(newComponent)
-      # newComponent = set()  
     
-    #print(len(connectedComponents))
-    # for x, y in itertools.combinations(connectedComponents, 2):
-    #   if x.intersection(y):
-    #     print(x)
-    #     print(y)
-    #     print(x.intersection(y))
-    #     print()
-
-
-
-    # print([len(x) for x in connectedComponents])
-    # for x in connectedComponents:
-      # if len(x) == 1:
-        # print(x)
-    
+    #print(connectedComponents)
     for idx, component in enumerate(connectedComponents):
       if len(component) == 1:
         continue
@@ -294,7 +326,8 @@ class ILP(object):
         for start in bpp_iterator:
           values = self.bpp_dict[start]
           for stop, probability in values.items():
-            if stop <= start:
+            if stop <= start or stop-start < 4:
+              #print(f"e_{start}_{stop}")
               continue
             outputStream.write(f"+ {probability} e_{start}_{stop} ")
             edges.append(f"e_{start}_{stop}")
@@ -302,12 +335,20 @@ class ILP(object):
         outputStream.write("\nSubject To\n")
         variableCounter = 1
         conflictCounter = 0
+
+        for edge in edges:
+          start = edge.split('_')[1]
+          stop = edge.split('_')[2]
+          outputStream.write(f"c{variableCounter}: e_{start}_{stop} - e_{stop}_{start} = 0\n")
+          variableCounter += 1
+
         for idx, start in enumerate(bpp_iterator):
           values = self.bpp_dict[start]
           if len(values) != 1:
-            constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
-            outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
-            variableCounter += 1
+            constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)]) #if f'e_{start}_{x}' in edges])
+            if constraint:
+              outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
+              variableCounter += 1
         
           highest_partner = sorted(list(values), reverse=True)[0]
         
@@ -332,51 +373,6 @@ class ILP(object):
           outputStream.write(f"{edge}\n")
         outputStream.write("End\n")
 
-
-    # exit(0)
-    # with open(f"{self.outdir}/tmpSequences/{self.prefix}_structure.ilp", 'w') as outputStream:
-    #   outputStream.write("Maximize\n")
-    #   outputStream.write("obj: ")
-    #   edges = []
-    #   #bpp_iterator = sorted(list(self.bpp_dict))
-    #   for start in bpp_iterator:
-    #     values = self.bpp_dict[start]
-    #     for stop, probability in values.items():
-    #       if stop <= start:
-    #         continue
-    #       outputStream.write(f"+ {probability} e_{start}_{stop} ")
-    #       edges.append(f"e_{start}_{stop}")
-      
-    #   outputStream.write("\nSubject To\n")
-    #   variableCounter = 1
-    #   conflictCounter = 0
-    #   for idx, start in enumerate(bpp_iterator):
-    #     values = self.bpp_dict[start]
-    #     if len(values) != 1:
-    #       constraint = ' + '.join([f'e_{start}_{x}' for x in map(str, values)])
-    #       outputStream.write(f"c{variableCounter}: {constraint} <= 1\n")
-    #       variableCounter += 1
-        
-    #     highest_partner = sorted(list(values), reverse=True)[0]
-        
-    #     for potentialConflictStart in bpp_iterator[idx:]:
-    #       if potentialConflictStart >= highest_partner:
-    #         break
-    #       potentialConflictValues = self.bpp_dict[potentialConflictStart]
-    #       for stop in values:
-    #         if stop <= start:
-    #           continue
-    #         for potentialConflictStop in potentialConflictValues:
-    #           if start < potentialConflictStart < stop < potentialConflictStop:
-    #             conflictCounter += 1
-    #             outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
-    #             variableCounter += 1
-      
-    #   outputStream.write("\nBinary\n")
-    #   for edge in edges:
-    #     outputStream.write(f"{edge}\n")
-    #   outputStream.write("End\n")
-    
     return(False)
         
       
@@ -404,19 +400,3 @@ class ILP(object):
             start, stop = line[1].split('_')[1:]
             self.used_basepairs.append((int(start),int(stop)))
           
-
-
-  # def finalize_structure(self):
-  #   """
-  #   """
-  #   print([len(x) for _,x in self.bpps.items()])
-
-
-  # def resolve_conflicts(self):
-  #   """
-  #   """
-  #   for start, stop in self.overlappingStructures.items():
-  #     alignmentFragment = [str(x.seq) for x in self.alignment[:, start:stop]]
-  #     alifoldObject = RNA.fold_compound(alignmentFragment)
-  #     structure, _ = alifoldObject.mfe()
-  #     self.finalStructure = self.finalStructure[:start] + structure + self.finalStructure[stop+1:]

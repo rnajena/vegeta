@@ -90,11 +90,17 @@ class Clusterer(object):
   def remove_redundancy(self):
     """
     """
-    cmd = f"cd-hit-est -i {self.sequenceFile} -o {self.reducedSequences} -c 1"
-    TRASH = open(os.devnull, 'w')
-    subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
-    self.d_sequences = self.read_sequences()
-    TRASH.close()
+    if not self.subCluster:
+      cmd = f"cd-hit-est -i {self.sequenceFile} -o {self.reducedSequences} -c 1"
+      TRASH = open(os.devnull, 'w')
+      subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
+      TRASH.close()
+      
+    self.d_sequences = self.read_sequences()  
+    if self.d_sequences == 1:
+      import shutil
+      shutil.copyfile(self.sequenceFile, f'{self.outdir}/{os.path.splitext(os.path.basename(self.sequenceFile))[0]}_repr.fa')
+      return 1
 
   def __parse_fasta(self, filePath, goi=False):
     """
@@ -144,6 +150,8 @@ class Clusterer(object):
       Clusterer.dim = len(fastaContent)
       Clusterer.matrix = np.zeros(shape=(Clusterer.dim, Clusterer.dim), dtype=float)
 
+    if len(fastaContent) < 21:
+      return 1
     return fastaContent
 
 
@@ -209,6 +217,8 @@ class Clusterer(object):
 
       self.clusterlabel = clusterer.labels_
       self.probabilities = clusterer.probabilities_
+      if len(set(self.clusterlabel)) == 1:
+        raise TypeError
 
     except TypeError:
       import shutil
@@ -216,7 +226,6 @@ class Clusterer(object):
       return 1
 
     self.allCluster = list(zip([x[0] for x in profiles], self.clusterlabel))
-
     if not self.subCluster:
       with open(f'{self.outdir}/cluster.txt', 'w') as outStream:
         for i in set(self.clusterlabel):

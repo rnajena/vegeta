@@ -21,11 +21,19 @@ MSA of the representative viruses.
 
 Python Dependencies:
   docopt
+  BioPython
+  colorlog
+  numpy
+  scipy
+  umap-learn
+  hdbscan
 
 Other Dependencies:
   ViennaRNA package
+  cd-hit
   MAFFT
   LocARNA
+  GLPK
 
 Contact:
   kevin.lamkiewicz@uni-jena.de
@@ -49,6 +57,10 @@ Options:
                                           NOTE: This is not recommended for large datasets. [Default: False]
   -c, --cluster-only                      Only performs the clustering step of sequences, without the alignment. [Default: False]
 
+
+  --subcluster                            Additionally to the initial alignment, each cluster gets analyzed for 
+                                          local structures and relations which results in an alignment for each initial 
+                                          cluster. WARNING: This will increase the overall runtime drastically! [Default: False]
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
@@ -59,12 +71,17 @@ Options:
                                           it isn't considered during ILP construction. [Default: 0.7]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
-  --allowLP                               If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
+
+  --allowLP                               NOT IMPLEMENTED COMPLETELY YET -- If this is set, VeGETA will include lonely basepairs (isolated helices of length 1)
                                           into the final structure. [Default: False]
   
+  --shuffle SHUFFLE                       Number of sampled sequences created for each structural element; required for 
+                                          significance testing (z-score analyses). [Default: 500]
+  --pvalue PVALUE                         p-Value threshold whether a structure gets accepted or not in the final solution
+                                          based on its z-score analyses. [Default: 0.05]
 
 Version:
-  VeGETA v0.2 (alpha)
+  VeGETA v0.3 (alpha)
 """
 
 import sys
@@ -144,7 +161,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.2")
+    print("VeGETA version 0.3")
     exit(0)
 
   
@@ -179,6 +196,7 @@ def parse_arguments(d_args):
   except ValueError:
     logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
+
   if not (0 <= tbpp <= 1):
     logger.error("Invalid number for the basepair probability threshold. Please input a number between 0 and 1.")
     exit(2)
@@ -207,6 +225,23 @@ def parse_arguments(d_args):
     logger.error("Invalid number for the shannon entropy cutoff threshold. Please input a number higher than 0.0.")
     exit(2)
 
+  try:
+    shuffle = int(d_args['--shuffle'])
+  except ValueError:
+    logger.error("Invalid number for the number of shuffle events. Please input a number higher than 0.")
+    exit(2)
+
+  try:
+    pvalue = float(d_args['--pvalue'])
+  except ValueError:
+    logger.error("Invalid number for the p-value threshold. Please input a number between 0.0 and 1.0")
+    exit(2)
+
+  if not (0 <= pvalue <= 1):
+    logger.error("Invalid number for the p-value threshold. Please input a number between 0.0 and 1.0")
+    exit(2)
+
+
   output = d_args['--output']
   if output == 'pwd':
     output = os.getcwd()
@@ -219,23 +254,37 @@ def parse_arguments(d_args):
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
   allowLP = d_args['--allowLP']
+  subcluster = d_args['--subcluster']
 
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP)
+def __abort_cluster(clusterObject, filename):
+    logger.warn(f"Too few sequences for clustering in {os.path.basename(filename)}. Alignment will be calculated with all sequences of this cluster.")
+    del clusterObject
 
 def perform_clustering():
 
   multiPool = Pool(processes=proc)
   virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
+
   logger.info("Removing 100% identical sequences.")
-  virusClusterer.remove_redundancy()
+  code = virusClusterer.remove_redundancy()
   logger.info("Sequences are all parsed.")
+
+  if code == 1:
+    __abort_cluster(virusClusterer, inputSequences)
+    return 0
+
   if goi:
     logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
   logger.info("Determining k-mer profiles for all sequences.")
   virusClusterer.determine_profile(multiPool)
   logger.info("Clustering with UMAP and HDBSCAN.")
-  virusClusterer.apply_umap()
+  code = virusClusterer.apply_umap()
+  if code == 1:
+    __abort_cluster(virusClusterer, inputSequences)
+    #logger.warning(f"All sequences fall into one cluster. Aligning this one without dividing the sequences anymore.")
+    return 0
   clusterInfo = virusClusterer.clusterlabel
   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
 
@@ -254,16 +303,29 @@ def perform_clustering():
   profiles = virusClusterer.d_profiles
   del virusClusterer
 
+  if not subcluster:
+    return 0
+
   for file in glob.glob(f"{outdir}/cluster*.fa"):
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
     virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
-    virusSubClusterer.d_sequences = virusSubClusterer.read_sequences()
-    code = virusSubClusterer.apply_umap()
+    code = virusSubClusterer.remove_redundancy()
+    
     if code == 1:
-      logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-      del virusSubClusterer
+      __abort_cluster(virusSubClusterer, file)
+      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+      #del virusSubClusterer
       continue
+
+    code = virusSubClusterer.apply_umap()
+    
+    if code == 1:
+      __abort_cluster(virusSubClusterer, file)
+      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+      #del virusSubClusterer
+      continue
+
     virusSubClusterer.get_centroids(multiPool)
     virusSubClusterer.split_centroids()
     del virusSubClusterer
@@ -271,9 +333,7 @@ def perform_clustering():
 def perform_alignment(seq=None):
 
   #if seq:
-  #  clusteredSequences = seq
-  #else:
-  #  clusteredSequences = f'{outdir}/representative_viruses.fa'
+  #  clusteredSequences = seq\
   logger.info("Starting the alignment step of VeGETA.\n")
 
   #if goi:
@@ -315,7 +375,7 @@ def perform_alignment(seq=None):
     shutil.rmtree(f"{outdir}/tmpSequences")
 
 def derive_structure(prefix):
-  struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix)
+  struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix, shuffle, pvalue)
   logger.info("Applying RNAalifold on alignment windows.")
   struc.apply_alifold()
   logger.info("Parsing basepairing probabilities out of windows.")
@@ -323,9 +383,9 @@ def derive_structure(prefix):
   logger.info("Generating ILP based on all basepairing probabilities.")
   logger.info("Solving the ILP may take a while.")
   struc.generate_ilp()
-  logger.info("Deriving structural elements from ILP solution.")
+  logger.info("Deriving structural elements from ILP solution and testing individual structural elements for significance (nucleotide shuffling).")
+  #logger.info("testing individual structural elements for significance (nucleotide shuffling).")
   struc.finalize_structure()
-  logger.info("Testing individual structural elements for significance (dinucleotide shuffling).")
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure, prefix):
@@ -333,15 +393,15 @@ def write_final_alignment(alignment, structure, prefix):
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
-    outputStream.write("#=GF BM  VeGETA v. 0.2\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.3\n")
     outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
     
     for record in alignment:
     #for header, sequence in alignment.items():
       spacesToFill = longestID - len(record.id) + 5
-      outputStream.write(f"{record.id}{' '*spacesToFill}{record.seq}\n")
+      outputStream.write(f"{record.id}{' '*spacesToFill}{str(record.seq).replace('T','U')}\n")
     spacesToFill = longestID - len('#=GC SS_cons') + 5
-    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n")
+    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n//\n")
 
   #virusAligner.calculate_pw_distances()
   #virusAligner.get_tree_from_dist()
@@ -352,9 +412,9 @@ def write_final_alignment(alignment, structure, prefix):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
 
-  structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp)
+  structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, shuffle, pvalue)
 
   if alnOnly:
     logger.info("Skipping clustering and directly calculate the alignment.")
