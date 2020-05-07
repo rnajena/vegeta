@@ -21,11 +21,19 @@ MSA of the representative viruses.
 
 Python Dependencies:
   docopt
+  BioPython
+  colorlog
+  numpy
+  scipy
+  umap-learn
+  hdbscan
 
 Other Dependencies:
   ViennaRNA package
+  cd-hit
   MAFFT
   LocARNA
+  GLPK
 
 Contact:
   kevin.lamkiewicz@uni-jena.de
@@ -49,6 +57,10 @@ Options:
                                           NOTE: This is not recommended for large datasets. [Default: False]
   -c, --cluster-only                      Only performs the clustering step of sequences, without the alignment. [Default: False]
 
+
+  --subcluster                            Additionally to the initial alignment, each cluster gets analyzed for 
+                                          local structures and relations which results in an alignment for each initial 
+                                          cluster. WARNING: This will increase the overall runtime drastically! [Default: False]
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
@@ -242,9 +254,9 @@ def parse_arguments(d_args):
   alnOnly = d_args['--alignment-only']
   clusterOnly = d_args['--cluster-only']
   allowLP = d_args['--allowLP']
+  subcluster = d_args['--subcluster']
 
-
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
+  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
 
 def __abort_cluster(clusterObject, filename):
     logger.warn(f"Too few sequences for clustering in {os.path.basename(filename)}. Alignment will be calculated with all sequences of this cluster.")
@@ -291,6 +303,9 @@ def perform_clustering():
   profiles = virusClusterer.d_profiles
   del virusClusterer
 
+  if not subcluster:
+    return 0
+
   for file in glob.glob(f"{outdir}/cluster*.fa"):
     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
       continue
@@ -318,9 +333,7 @@ def perform_clustering():
 def perform_alignment(seq=None):
 
   #if seq:
-  #  clusteredSequences = seq
-  #else:
-  #  clusteredSequences = f'{outdir}/representative_viruses.fa'
+  #  clusteredSequences = seq\
   logger.info("Starting the alignment step of VeGETA.\n")
 
   #if goi:
@@ -388,7 +401,7 @@ def write_final_alignment(alignment, structure, prefix):
       spacesToFill = longestID - len(record.id) + 5
       outputStream.write(f"{record.id}{' '*spacesToFill}{str(record.seq).replace('T','U')}\n")
     spacesToFill = longestID - len('#=GC SS_cons') + 5
-    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n\\\n")
+    outputStream.write(f"#=GC SS_cons{' '*spacesToFill}{structure}\n//\n")
 
   #virusAligner.calculate_pw_distances()
   #virusAligner.get_tree_from_dist()
@@ -399,7 +412,7 @@ def write_final_alignment(alignment, structure, prefix):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
+  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
 
   structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, shuffle, pvalue)
 
