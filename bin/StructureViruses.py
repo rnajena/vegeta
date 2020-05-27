@@ -98,8 +98,8 @@ class StructCalculator(object):
           if not line.endswith("ubox") or line.startswith("%"):
             continue
           line = line.split()
-          start = int(line[3]) + currentWindow[0]
-          stop = int(line[4]) + currentWindow[0]
+          start = int(line[3]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
+          stop = int(line[4]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
           bpp = math.pow(float(line[5]), 2)
 
           if bpp >= self.tbpp:
