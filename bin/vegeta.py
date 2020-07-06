@@ -389,7 +389,7 @@ def derive_structure(prefix):
   return(struc.finalStructure)
 
 def write_final_alignment(alignment, structure, prefix):
-  longestID = max([len(x.id) for x in alignment]+["#=GC SS_cons"])
+  longestID = max([len(x.id) for x in alignment]+[len("#=GC SS_cons")])
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
