@@ -33,7 +33,7 @@ To make it as easy as possible, I highly recommend using `conda` for the next st
 Simply create a new environment based on the `environment.yml` file of this repository.
 This will create an environment for you called `vegeta` which already includes all dependencies and third-party tools used by VeGETA. Confused? Check our these [conda webpages](https://docs.conda.io/en/latest/) if you want to learn more.
 
-`conda create -f environment.yml`
+`conda env create -f environment.yml`
 
 
 Next, activate your newly created environment:
