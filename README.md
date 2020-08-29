@@ -24,6 +24,7 @@ To circumvent this problem, we further provide one alignment for each of the ini
 The easiest way *at the moment* is simply following these instructions:
 
 Download the latest version of VeGETA or clone this repository:
+Download the latest version of VeGETA [here](https://github.com/klamkiew/vegeta/archive/v0.3.zip) or clone this repository:
 
 `git clone https://github.com/klamkiew/vegeta.git`
 
