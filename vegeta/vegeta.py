@@ -113,9 +113,7 @@ def warn(*args, **kwargs):
 import warnings
 warnings.warn = warn
 
-from ClusterViruses import Clusterer
-from AlignViruses import Aligner
-from StructureViruses import StructCalculator
+from vegeta import Clusterer, Aligner, StructCalculator
 
 def create_logger():
     """
