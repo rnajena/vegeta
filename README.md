@@ -41,6 +41,10 @@ Next, activate your newly created environment:
 
 `conda activate vegeta`
 
+And install Vegeta
+
+`pip install . # must be inside the cloned repository`
+
 And you are all set up: Run a `vegeta.py -h` to see whether any package is missing. Seeing the help message of our pipeline? Good, then we can continue.
 
 ### How to use VeGETA
