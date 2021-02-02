@@ -221,92 +221,11 @@ def parse_arguments(d_args):
 
   return (inputSequences, output, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
 
-
-# def perform_clustering():
-
-#   multiPool = Pool(processes=proc)
-#   virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
-
-#   logger.info("Removing 100% identical sequences.")
-#   code = virusClusterer.remove_redundancy()
-#   logger.info("Sequences are all parsed.")
-
-#   if code == 1:
-#     __abort_cluster(virusClusterer, inputSequences)
-#     return 0
-
-#   if goi:
-#     logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
-#   logger.info("Determining k-mer profiles for all sequences.")
-#   virusClusterer.determine_profile(multiPool)
-#   logger.info("Clustering with UMAP and HDBSCAN.")
-#   code = virusClusterer.apply_umap()
-#   if code == 1:
-#     __abort_cluster(virusClusterer, inputSequences)
-#     #logger.warning(f"All sequences fall into one cluster. Aligning this one without dividing the sequences anymore.")
-#     return 0
-#   clusterInfo = virusClusterer.clusterlabel
-#   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
-
-#   goiCluster = virusClusterer.goi2Cluster
-#   if goiCluster:
-#     for header, cluster in goiCluster.items():
-#       logger.info(f"You find the genome {header} in cluster {cluster}.")
-
-#   logger.info("Extracting centroid sequences and writing results to file.\n")
-#   virusClusterer.get_centroids(multiPool)
-#   virusClusterer.split_centroids()
-  
-#   logger.info(f"Extracting representative sequences for each cluster.")
-#   sequences = virusClusterer.d_sequences
-#   distanceMatrix = virusClusterer.matrix
-#   profiles = virusClusterer.d_profiles
-#   del virusClusterer
-
-#   if not subcluster:
-#     return 0
-
-#   for file in glob.glob(f"{outdir}/cluster*.fa"):
-#     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
-#       continue
-#     virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
-#     code = virusSubClusterer.remove_redundancy()
-    
-#     if code == 1:
-#       __abort_cluster(virusSubClusterer, file)
-#       #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-#       #del virusSubClusterer
-#       continue
-
-#     code = virusSubClusterer.apply_umap()
-    
-#     if code == 1:
-#       __abort_cluster(virusSubClusterer, file)
-#       #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-#       #del virusSubClusterer
-#       continue
-
-#     virusSubClusterer.get_centroids(multiPool)
-#     virusSubClusterer.split_centroids()
-#     del virusSubClusterer
-
-def perform_alignment(seq=None):
-
-  #if seq:
-  #  clusteredSequences = seq\
+def perform_alignment(seq):
   logger.info("Starting the alignment step of VeGETA.\n")
 
-  #if goi:
-  #  logger.info(f"Including your virus of interest:\n{goi}\n")
-  #  with open(clusteredSequences, 'a') as outputStream:
-  #    with open(goi, 'r') as inputStream:
-  #      outputStream.write("".join(inputStream.readlines()))
 
-  if seq:
-    files = [seq]
-  else:
-    files = glob.glob(f"{outdir}/*_repr.fa")
-  
+  files = [seq] 
   for file in files:
     
     try:
@@ -375,15 +294,4 @@ if __name__ == "__main__":
   (inputSequences, outdir, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
 
   structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, shuffle, pvalue)
-  perform_alignment(seq=inputSequences)
-
-  # if alnOnly:
-  #   logger.info("Skipping clustering and directly calculate the alignment.")
-    
-  # elif clusterOnly:
-  #   logger.info("Only clustering is performed. The alignment calculation will be skipped.")
-  #   perform_clustering()
-  # else:
-  #   logger.info("Doing both, the clustering and the alignment step.")
-  #   perform_clustering()
-  #   perform_alignment()
+  perform_alignment(inputSequences)
