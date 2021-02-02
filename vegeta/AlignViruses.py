@@ -22,7 +22,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
 
 
-from .StructureViruses import StructCalculator
+# from .StructureViruses import StructCalculator
 
 class Aligner(object):
   """

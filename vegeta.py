@@ -7,17 +7,10 @@
 """
 VeGETA -- Viral GEnome sTructure Alignments
 
-VeGETA is a python program that takes several genome sequences
-from different viruses as an input. In the very first step,
-VeGETA will cluster these sequences into groups (clades) based 
-on their sequence similarity. For each clade, the centroid sequence is
-determined as representative genome, i.e. the sequence with the lowest
-distance to all other sequences of this clade. 
-
-In a second step, VeGETA calculates a multiple sequence alignment of 
-the representative genomes. This alignment is progressively refined
+VeGETA calculates a multiple sequence alignment of 
+the viral genomes. This alignment is progressively refined
 using 'MAFFT' and 'LocARNA'. In the end, we provide a local-structure guided
-MSA of the representative viruses.
+MSA of the viruses.
 
 Python Dependencies:
   docopt
@@ -25,12 +18,9 @@ Python Dependencies:
   colorlog
   numpy
   scipy
-  umap-learn
-  hdbscan
 
 Other Dependencies:
   ViennaRNA package
-  cd-hit
   MAFFT
   LocARNA
   GLPK
@@ -42,7 +32,7 @@ Citation:
   Lamkiewicz, K., et al. (20xx), "Structure-guided multiple sequence alignments of complete viral genomes.", Journal, Issue, Volume.
 
 Usage:
-  vegeta.py [options] [-a|-c] <inputSequences> [<genomeOfInterest>]
+  vegeta.py [options] <inputSequences>
 
 Options:
   -h, --help                              Show this help message and exits.
@@ -50,17 +40,8 @@ Options:
   --version                               Prints the version of VeGETA and exits.
   -o DIR, --output DIR                    Specifies the output directory of VeGETA. [Default: pwd]
 
-  -k KMER, --kmer KMER                    Length of the considered kmer. [Default: 7]
   -p PROCESSES, --process PROCESSES       Specify the number of CPU cores that are used. [Default: 1]
 
-  -a, --alignment-only                    Only performs the alignment calculation, without prior clustering. 
-                                          NOTE: This is not recommended for large datasets. [Default: False]
-  -c, --cluster-only                      Only performs the clustering step of sequences, without the alignment. [Default: False]
-
-
-  --subcluster                            Additionally to the initial alignment, each cluster gets analyzed for 
-                                          local structures and relations which results in an alignment for each initial 
-                                          cluster. WARNING: This will increase the overall runtime drastically! [Default: False]
   --seedsize SEEDSIZE                     Specifies the length of a region that has to be conserved in order to serve as 
                                           a seed region in the sequence-based scaffold alignment. [Default: 10]
   --shannon SHANNON                       Cut-off value for a seed window based on its averaged shannon entropy.
@@ -81,7 +62,7 @@ Options:
                                           based on its z-score analyses. [Default: 0.05]
 
 Version:
-  VeGETA v0.3 (alpha)
+  VeGETA v0.4 (alpha)
 """
 
 import sys
@@ -100,7 +81,6 @@ from docopt import docopt
 from Bio import Phylo
 
 inputSequences = None
-goi = None
 outdir = None
 alnOnly = None
 clusterOnly = None
@@ -113,7 +93,7 @@ def warn(*args, **kwargs):
 import warnings
 warnings.warn = warn
 
-from vegeta import Clusterer, Aligner, StructCalculator
+from vegeta import Aligner, StructCalculator 
 
 def create_logger():
     """
@@ -159,7 +139,7 @@ def parse_arguments(d_args):
   """
 
   if d_args['--version']:
-    print("VeGETA version 0.3")
+    print("VeGETA version 0.4")
     exit(0)
 
   
@@ -171,17 +151,6 @@ def parse_arguments(d_args):
   if not os.path.isfile(inputSequences):
     logger.error("Couldn't find input sequences. Check your file")
     exit(1)
-
-  goi = d_args['<genomeOfInterest>']
-  if goi and not os.path.isfile(goi):
-    logger.error("Couldn't find genome of interest. Check your file")
-    exit(1)
-
-  try:
-    k = int(d_args['--kmer'])
-  except ValueError:
-    logger.error("Invalid parameter for k-mer size. Please input a number.")
-    exit(2)
   
   try:
     proc = int(d_args['--process'])
@@ -248,85 +217,78 @@ def parse_arguments(d_args):
   output = f"{output}/vegeta/"
   create_outdir(output)
 
-
-  alnOnly = d_args['--alignment-only']
-  clusterOnly = d_args['--cluster-only']
   allowLP = d_args['--allowLP']
-  subcluster = d_args['--subcluster']
 
-  return (inputSequences, goi, output, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
+  return (inputSequences, output, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue)
 
-def __abort_cluster(clusterObject, filename):
-    logger.warn(f"Too few sequences for clustering in {os.path.basename(filename)}. Alignment will be calculated with all sequences of this cluster.")
-    del clusterObject
 
-def perform_clustering():
+# def perform_clustering():
 
-  multiPool = Pool(processes=proc)
-  virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
+#   multiPool = Pool(processes=proc)
+#   virusClusterer = Clusterer(logger, inputSequences, k, proc, outdir, goi=goi)
 
-  logger.info("Removing 100% identical sequences.")
-  code = virusClusterer.remove_redundancy()
-  logger.info("Sequences are all parsed.")
+#   logger.info("Removing 100% identical sequences.")
+#   code = virusClusterer.remove_redundancy()
+#   logger.info("Sequences are all parsed.")
 
-  if code == 1:
-    __abort_cluster(virusClusterer, inputSequences)
-    return 0
+#   if code == 1:
+#     __abort_cluster(virusClusterer, inputSequences)
+#     return 0
 
-  if goi:
-    logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
-  logger.info("Determining k-mer profiles for all sequences.")
-  virusClusterer.determine_profile(multiPool)
-  logger.info("Clustering with UMAP and HDBSCAN.")
-  code = virusClusterer.apply_umap()
-  if code == 1:
-    __abort_cluster(virusClusterer, inputSequences)
-    #logger.warning(f"All sequences fall into one cluster. Aligning this one without dividing the sequences anymore.")
-    return 0
-  clusterInfo = virusClusterer.clusterlabel
-  logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
+#   if goi:
+#     logger.info(f"Found {len(virusClusterer.goiHeader)} genome(s) of interest.")
+#   logger.info("Determining k-mer profiles for all sequences.")
+#   virusClusterer.determine_profile(multiPool)
+#   logger.info("Clustering with UMAP and HDBSCAN.")
+#   code = virusClusterer.apply_umap()
+#   if code == 1:
+#     __abort_cluster(virusClusterer, inputSequences)
+#     #logger.warning(f"All sequences fall into one cluster. Aligning this one without dividing the sequences anymore.")
+#     return 0
+#   clusterInfo = virusClusterer.clusterlabel
+#   logger.info(f"Summarized {virusClusterer.dim} sequences into {clusterInfo.max()+1} clusters. Filtered {np.count_nonzero(clusterInfo == -1)} sequences due to uncertainty.")
 
-  goiCluster = virusClusterer.goi2Cluster
-  if goiCluster:
-    for header, cluster in goiCluster.items():
-      logger.info(f"You find the genome {header} in cluster {cluster}.")
+#   goiCluster = virusClusterer.goi2Cluster
+#   if goiCluster:
+#     for header, cluster in goiCluster.items():
+#       logger.info(f"You find the genome {header} in cluster {cluster}.")
 
-  logger.info("Extracting centroid sequences and writing results to file.\n")
-  virusClusterer.get_centroids(multiPool)
-  virusClusterer.split_centroids()
+#   logger.info("Extracting centroid sequences and writing results to file.\n")
+#   virusClusterer.get_centroids(multiPool)
+#   virusClusterer.split_centroids()
   
-  logger.info(f"Extracting representative sequences for each cluster.")
-  sequences = virusClusterer.d_sequences
-  distanceMatrix = virusClusterer.matrix
-  profiles = virusClusterer.d_profiles
-  del virusClusterer
+#   logger.info(f"Extracting representative sequences for each cluster.")
+#   sequences = virusClusterer.d_sequences
+#   distanceMatrix = virusClusterer.matrix
+#   profiles = virusClusterer.d_profiles
+#   del virusClusterer
 
-  if not subcluster:
-    return 0
+#   if not subcluster:
+#     return 0
 
-  for file in glob.glob(f"{outdir}/cluster*.fa"):
-    if file == f"{outdir.rstrip('/')}/cluster-1.fa":
-      continue
-    virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
-    code = virusSubClusterer.remove_redundancy()
+#   for file in glob.glob(f"{outdir}/cluster*.fa"):
+#     if file == f"{outdir.rstrip('/')}/cluster-1.fa":
+#       continue
+#     virusSubClusterer = Clusterer(logger, file, k, proc, outdir, subCluster=True)
+#     code = virusSubClusterer.remove_redundancy()
     
-    if code == 1:
-      __abort_cluster(virusSubClusterer, file)
-      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-      #del virusSubClusterer
-      continue
+#     if code == 1:
+#       __abort_cluster(virusSubClusterer, file)
+#       #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+#       #del virusSubClusterer
+#       continue
 
-    code = virusSubClusterer.apply_umap()
+#     code = virusSubClusterer.apply_umap()
     
-    if code == 1:
-      __abort_cluster(virusSubClusterer, file)
-      #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
-      #del virusSubClusterer
-      continue
+#     if code == 1:
+#       __abort_cluster(virusSubClusterer, file)
+#       #logger.warn(f"Too few sequences for clustering in {os.path.basename(file)}. Alignment will be calculated with all sequences of this cluster.")
+#       #del virusSubClusterer
+#       continue
 
-    virusSubClusterer.get_centroids(multiPool)
-    virusSubClusterer.split_centroids()
-    del virusSubClusterer
+#     virusSubClusterer.get_centroids(multiPool)
+#     virusSubClusterer.split_centroids()
+#     del virusSubClusterer
 
 def perform_alignment(seq=None):
 
@@ -391,7 +353,7 @@ def write_final_alignment(alignment, structure, prefix):
   with open(f"{outdir}/{prefix}_finalAlignment.stk",'w') as outputStream:
     outputStream.write("# STOCKHOLM 1.0\n")
     outputStream.write("#=GF AU  Kevin Lamkiewicz\n")
-    outputStream.write("#=GF BM  VeGETA v. 0.3\n")
+    outputStream.write("#=GF BM  VeGETA v. 0.4\n")
     outputStream.write(f"#=GF SQ  {len(alignment)}\n\n")
     
     for record in alignment:
@@ -410,17 +372,18 @@ def write_final_alignment(alignment, structure, prefix):
 
 if __name__ == "__main__":
   logger = create_logger()
-  (inputSequences, goi, outdir, alnOnly, clusterOnly, k, proc, tbpp, subcluster, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
+  (inputSequences, outdir, proc, tbpp, seedSize, windowSize, stepSize, shannon, allowLP, shuffle, pvalue) = parse_arguments(docopt(__doc__))
 
   structureParameter = (logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, shuffle, pvalue)
+  perform_alignment(seq=inputSequences)
 
-  if alnOnly:
-    logger.info("Skipping clustering and directly calculate the alignment.")
-    perform_alignment(seq=inputSequences)
-  elif clusterOnly:
-    logger.info("Only clustering is performed. The alignment calculation will be skipped.")
-    perform_clustering()
-  else:
-    logger.info("Doing both, the clustering and the alignment step.")
-    perform_clustering()
-    perform_alignment()
+  # if alnOnly:
+  #   logger.info("Skipping clustering and directly calculate the alignment.")
+    
+  # elif clusterOnly:
+  #   logger.info("Only clustering is performed. The alignment calculation will be skipped.")
+  #   perform_clustering()
+  # else:
+  #   logger.info("Doing both, the clustering and the alignment step.")
+  #   perform_clustering()
+  #   perform_alignment()
