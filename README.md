@@ -24,6 +24,7 @@ To circumvent this problem, we further provide one alignment for each of the ini
 The easiest way *at the moment* is simply following these instructions:
 
 Download the latest version of VeGETA or clone this repository:
+Download the latest version of VeGETA [here](https://github.com/klamkiew/vegeta/archive/v0.3.zip) or clone this repository:
 
 `git clone https://github.com/klamkiew/vegeta.git`
 
@@ -39,6 +40,10 @@ This will create an environment for you called `vegeta` which already includes a
 Next, activate your newly created environment:
 
 `conda activate vegeta`
+
+And install Vegeta
+
+`pip install . # must be inside the cloned repository`
 
 And you are all set up: Run a `vegeta.py -h` to see whether any package is missing. Seeing the help message of our pipeline? Good, then we can continue.
 
