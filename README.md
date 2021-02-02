@@ -9,14 +9,12 @@ I am not responsible for any results produced with VeGETA nor for the conclusion
 ***
 
 ### What is this about?
-RNA viruses usually exploit RNA secondary structures to regulate all kind of mechanisms and steps during the viral life-cycle. For example, [earlier studies](https://www.sciencedirect.com/science/article/pii/S004268221730404X) indicate that a single mutation in the 5'UTR of HCoV-229E, which disrupts a specific structural element, causes the viral replication level to decrease. Therefore we provide this pipeline to generate whole genome alignments of viruses and annotates the different regions with RNA secondary structures information. To do this in an efficient manner, we cluster sequences first and then pick representative genomes from each cluster to calculate an alignment.
-
+RNA viruses usually exploit RNA secondary structures to regulate all kind of mechanisms and steps during the viral life-cycle. For example, [earlier studies](https://www.sciencedirect.com/science/article/pii/S004268221730404X) indicate that a single mutation in the 5'UTR of HCoV-229E, which disrupts a specific structural element, causes the viral replication level to decrease. Therefore we provide this pipeline to generate whole genome alignments of viruses and annotates the different regions with RNA secondary structures information.
 ### What do I need?
 Simply spoken, all you need is a `.fasta` file containing your viruses and a linux OS. As usual in life, things are more complicated. You'll need to install some third party software to use VeGETA. Please refer to the [`How-To Install` section](#how-do-i-install-vegeta).
 
 ### What do I get?
 VeGETA outputs a whole bunch of alignments. First and foremost, you'll get an alignment with structure information for the representative viruses of your input set. However, most of the time RNA viruses are very diverse in their sequence information. Since we're using a sequence alignment as first scaffold, the diversity usually leads to problems further downstream the pipeline. You will get an alignment - we never promised it'd be beautiful. 
-To circumvent this problem, we further provide one alignment for each of the initial cluster. 
 
 ***
 
@@ -41,10 +39,6 @@ Next, activate your newly created environment:
 
 `conda activate vegeta`
 
-And install Vegeta
-
-`pip install . # must be inside the cloned repository`
-
 And you are all set up: Run a `vegeta.py -h` to see whether any package is missing. Seeing the help message of our pipeline? Good, then we can continue.
 
 ### How to use VeGETA
@@ -59,14 +53,6 @@ To give you some quality of life improvements, we'd advise using the following p
 `-v`: Get some more information about what is going on right now.
 
 `-o <PATH/TO/DIR>`: Specify an output path. Per default, we simply create a new directory called `vegeta/` in your current working directory.
-
-`-c`: Only want to cluster your data? Use this parameter.
-
-`-a`: Only want the alignment and don't cluster beforehand? Use this switch.
- **DISCLAIMER**: We do not recommend using this for more than 20 sequences. First, due to runtime and memory consumption, and secondly, due to viruses being diverse. Your alignment will most likely not yield useful information.
-
- `-k <INT>`: This sets the k-mer size used by VeGETA to cluster the input sequences. Default is 7. 
- **DISCLAIMER**: Since we're using k-mer vectors to cluster our sequences, the space needed to calculate (and store) ALL k-mer of all sequences increases quite fast. We do not recommend increasing this parameter, unless you have enough money for several GB of RAM. `k=7` for a bunch (1.700) of Coronaviruses takes up to 6 GB of RAM, whereas `k=9` does not work on a machine with 16 GB RAM total. Trust me...
 
 There are some more parameters which are not explained in detail here. Please refer to the help page of VeGETA (`vegeta --help`).
 
