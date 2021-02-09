@@ -65,6 +65,11 @@ class StructCalculator(object):
       with open(f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}.aln" ,'w') as outputStream:
         fragment = self.alignment[:, start:stop]
         for record in fragment:
+          if idx == 0 or idx == len(windows)-1:
+            groupsInSeq = itertools.groupby(str(record.seq))
+            result = max([0] + [sum(1 for _ in group) for gap, group in groupsInSeq if gap == '-'])
+            if result >= 10:
+              continue
           outputStream.write(f">{record.id}\n{record.seq}\n")
 
     return(windows)
@@ -91,6 +96,8 @@ class StructCalculator(object):
     for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_window_*.ps"):
       
       idx = int(os.path.basename(file).split('_')[-3])
+      #if idx != 0:
+      #  continue
       currentWindow = self.windows[idx]
       with open(file, 'r') as inputStream:
         for line in inputStream:
@@ -123,6 +130,8 @@ class StructCalculator(object):
   def generate_ilp(self):
     """
     """
+    with open(f"{self.outdir}/tmpSequences/parsed_bpp.txt", 'w') as outStream:
+      outStream.write("\n".join(map(str, sorted(list(self.bpps.items())))))
     ilp = ILP(self.bpps, self.outdir, self.prefix)
     self.used_basepairs = ilp.used_basepairs
     #print(sorted(self.used_basepairs))
@@ -229,10 +238,15 @@ class StructCalculator(object):
     for start, stop in localStructures:
       fragment = self.alignment[:, start:stop+1]
       #print(self.finalStructure[start:stop+1])
-      zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
-      if pvalue > self.pvalue:
-        for i in range(start,stop+1):
-          structure[i] = '.'
+
+
+      ############################
+      #zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
+      #if pvalue > self.pvalue:
+      #  for i in range(start,stop+1):
+      #    structure[i] = '.'
+      ############################
+
       #exit(0)
       #print(start, stop)
       #print(self.finalStructure[start:stop+1].count('('), self.finalStructure[start:stop+1].count(')'))
@@ -312,8 +326,8 @@ class ILP(object):
           break
         else:
           currentLength = len(inBetween)
-    
-    #print(connectedComponents)
+    print(len(filteredBPPs))
+    print(len(connectedComponents))
     for idx, component in enumerate(connectedComponents):
       if len(component) == 1:
         continue
@@ -335,12 +349,19 @@ class ILP(object):
         outputStream.write("\nSubject To\n")
         variableCounter = 1
         conflictCounter = 0
-
+        positions = set()
         for edge in edges:
           start = edge.split('_')[1]
           stop = edge.split('_')[2]
+          positions.add(int(start))
+          positions.add(int(stop))
           outputStream.write(f"c{variableCounter}: e_{start}_{stop} - e_{stop}_{start} = 0\n")
           variableCounter += 1
+          # outputStream.write(f"c{variableCounter}: p_{start} + p_{int(start)-1} + p_{int(start)+1} > 1\n")
+          # variableCounter += 1
+          # outputStream.write(f"c{variableCounter}: p_{stop} + p_{int(stop)-1} + p_{int(stop)+1}  > 1\n")
+          # variableCounter += 1
+          
 
         for idx, start in enumerate(bpp_iterator):
           values = self.bpp_dict[start]
@@ -365,12 +386,20 @@ class ILP(object):
                   outputStream.write(f"c{variableCounter}: e_{start}_{stop} + e_{potentialConflictStart}_{potentialConflictStop} <= 1\n")
                   variableCounter += 1
 
+        for pos in positions:
+          outputStream.write(f"c{variableCounter}: p_{pos} + p_{pos-1} + p_{pos+1} > 1\n")
+          variableCounter += 1
+
         if variableCounter == 1:
           outputStream.write(f"c{variableCounter}: {edges[0]} <= 1\n")
 
         outputStream.write("\nBinary\n")
         for edge in edges:
           outputStream.write(f"{edge}\n")
+        for pos in positions:
+           outputStream.write(f"p_{pos}\n")
+           outputStream.write(f"p_{pos-1}\n")
+           outputStream.write(f"p_{pos+1}\n")
         outputStream.write("End\n")
 
     return(False)

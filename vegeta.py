@@ -251,7 +251,7 @@ def perform_alignment(seq):
     structure = derive_structure(prefix)
     logger.info("Saving the final alignment in STOCKHOLM format")
     write_final_alignment(virusAligner.refinedAlignment, structure, prefix)
-    shutil.rmtree(f"{outdir}/tmpSequences")
+    #shutil.rmtree(f"{outdir}/tmpSequences")
 
 def derive_structure(prefix):
   struc = StructCalculator(f"{outdir}/{prefix}_refinedAlignment.aln", logger, outdir, windowSize, stepSize, proc, allowLP, tbpp, prefix, shuffle, pvalue)

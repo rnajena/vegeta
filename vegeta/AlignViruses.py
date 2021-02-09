@@ -132,7 +132,7 @@ class Aligner(object):
       file = f"{self.outdir}/tmpSequences/{self.prefix}_diverseFragment_{idx}.fasta"
       start, stop = self.nonSeeds[idx]
       if all( [ len(str(x.seq).replace('-','')) <= 300 for x in self.alignment[:, start:stop] ] ):
-        cmd = f"mlocarna --quiet --stockholm --threads {self.proc} {file}"
+        cmd = f"mlocarna -s 600 --quiet --stockholm --threads {self.proc} {file}"
         subprocess.run(cmd.split(), check=True)
 
       else:
