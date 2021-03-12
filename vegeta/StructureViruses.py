@@ -68,7 +68,7 @@ class StructCalculator(object):
           if idx == 0 or idx == len(windows)-1:
             groupsInSeq = itertools.groupby(str(record.seq))
             result = max([0] + [sum(1 for _ in group) for gap, group in groupsInSeq if gap == '-'])
-            if result >= 10:
+            if result >= 15:
               continue
           outputStream.write(f">{record.id}\n{record.seq}\n")
 
@@ -241,10 +241,10 @@ class StructCalculator(object):
 
 
       ############################
-      #zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
-      #if pvalue > self.pvalue:
-      #  for i in range(start,stop+1):
-      #    structure[i] = '.'
+      # zscore, pvalue = self.__soft_shuffle(fragment, self.shuffle)
+      # if pvalue > self.pvalue:
+      #   for i in range(start,stop+1):
+      #     structure[i] = '.'
       ############################
 
       #exit(0)
@@ -299,7 +299,7 @@ class ILP(object):
       return(True)
     bpp_iterator = sorted(list(filteredBPPs))
     
-
+    
     connectedComponents = []
     newComponent = set()
 
@@ -311,8 +311,20 @@ class ILP(object):
       currentLength = len(inBetween)
       #print(inBetween)
       while 1:
-        maxBPPs = [max(list(self.bpp_dict[x].keys())) for x in inBetween]
-        newMaxRight = max(maxBPPs)
+        interactionPartner = {}
+        for x in inBetween:
+          interactionPartner.update({y : bpp for y,bpp in self.bpp_dict[x].items() if y>maxRight and bpp>=0.7})
+        #print(inBetween)
+        #print(interactionPartner)
+        if interactionPartner:
+          maxBPPs = [max(list(interactionPartner))]
+          newMaxRight = max(maxBPPs)
+        else:
+          newMaxRight = maxRight
+        #maxBPPs = [max(list(self.bpp_dict[x].keys())) for x in inBetween if ]
+        #newMaxRight = max(maxBPPs)
+        
+        
         #inBetween = [left] + [x for x in range(left, newMaxRight) if x in self.bpp_dict]
         inBetween = [left] + [x for x in range(left, newMaxRight) if x in filteredBPPs]
 
