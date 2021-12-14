@@ -248,6 +248,10 @@ def perform_alignment(seq):
     logger.info("Merging all fragments to a whole alignment")
     virusAligner.merge_fragments()
     logger.info("Refined alignment calculated.")
+    logger.info("Merging all fragments to a whole alignment")
+    virusAligner.naive_consensus_majority()
+    exit(0)
+
     structure = derive_structure(prefix)
     logger.info("Saving the final alignment in STOCKHOLM format")
     write_final_alignment(virusAligner.refinedAlignment, structure, prefix)

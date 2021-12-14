@@ -200,3 +200,8 @@ class Aligner(object):
 
       fastaContent[header] = seq
     return fastaContent
+
+  def naive_consensus_majority(self):
+    """
+    """
+    
