@@ -20,7 +20,7 @@ import numpy as np
 from scipy.stats import norm
 from scipy.stats.mstats import zscore
 
-from Bio import AlignIO
+from Bio import AlignIO, SeqIO
 import RNA
 
 class StructCalculator(object):
@@ -41,10 +41,12 @@ class StructCalculator(object):
     self.tbpp = tbpp
     self.shuffle = shuffle
     self.pvalue = pvalue
+    
     self.alignment = self.__read_alignment(path)
     self.alnLength = self.alignment.get_alignment_length()
     self.finalStructure = '.' * self.alnLength
-    self.windows = self.__create_sliding_window()
+
+    #self.windows = self.__create_sliding_window()
     self.overlappingStructures = {}
     self.nonOverlap = {}
     self.bpps = {}
@@ -75,6 +77,19 @@ class StructCalculator(object):
     return(windows)
   
 
+  def scan_consensus(self, pathToFasta):
+    """
+    """
+    TRASH = open(os.devnull, 'w')
+    cmd = f"RNAplfold -W 300"
+    inputStream = open(pathToFasta)
+    process = subprocess.Popen(cmd.split(), stdin=inputStream)
+    process.wait()
+    inputStream.close()
+    #subprocess.run(cmd.split(), check=True)
+    shutil.move(f"{self.prefix}_dumb_consensus_dp.ps", f"{self.outdir}/{self.prefix}_dumb_consensus_dp.ps")
+    TRASH.close()
+
   def apply_alifold(self):
     """
     """
@@ -92,30 +107,47 @@ class StructCalculator(object):
   def calculate_avg_bpp(self):
     """
     """
-    
-    for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_window_*.ps"):
-      
-      idx = int(os.path.basename(file).split('_')[-3])
-      #if idx != 0:
-      #  continue
-      currentWindow = self.windows[idx]
-      with open(file, 'r') as inputStream:
-        for line in inputStream:
-          line = line.strip()
-          if not line.endswith("ubox") or line.startswith("%"):
-            continue
-          line = line.split()
-          start = int(line[3]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
-          stop = int(line[4]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
-          bpp = math.pow(float(line[5]), 2)
-
-          if bpp >= self.tbpp:
+    file = f"{self.outdir}/{self.prefix}_dumb_consensus_dp.ps"
+    with open(file, 'r') as inputStream:
+      for line in inputStream:
+        line = line.strip()
+        if not line.endswith("ubox") or line.startswith("%"):
+          continue
+        line = line.split()
+        start = int(line[0]) -1# -1, since the dot.ps file counts nucleotides starting at 1
+        stop = int(line[1]) -1# -1, since the dot.ps file counts nucleotides starting at 1
+        bpp = math.pow(float(line[2]), 2)
+        if bpp >= self.tbpp:
             self.__update_bpps(start, stop, bpp)
             self.__update_bpps(stop, start, bpp)
 
     for start, values in self.bpps.items():
       for stop, probabilites in values.items():
         self.bpps[start][stop] = np.average(probabilites)
+
+    # for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_window_*.ps"):
+      
+    #   idx = int(os.path.basename(file).split('_')[-3])
+    #   #if idx != 0:
+    #   #  continue
+    #   currentWindow = self.windows[idx]
+    #   with open(file, 'r') as inputStream:
+    #     for line in inputStream:
+    #       line = line.strip()
+    #       if not line.endswith("ubox") or line.startswith("%"):
+    #         continue
+    #       line = line.split()
+    #       start = int(line[3]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
+    #       stop = int(line[4]) -1 + currentWindow[0] # -1, since the dot.ps file counts nucleotides starting at 1
+    #       bpp = math.pow(float(line[5]), 2)
+
+    #       if bpp >= self.tbpp:
+    #         self.__update_bpps(start, stop, bpp)
+    #         self.__update_bpps(stop, start, bpp)
+
+    # for start, values in self.bpps.items():
+    #   for stop, probabilites in values.items():
+    #     self.bpps[start][stop] = np.average(probabilites)
 
   def __update_bpps(self, x, y, bpp):
     """

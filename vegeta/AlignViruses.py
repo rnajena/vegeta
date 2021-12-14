@@ -16,10 +16,11 @@ import glob
 import itertools
 
 import numpy as np
-from Bio import AlignIO
+from Bio import AlignIO, SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
+from Bio.Align.AlignInfo import SummaryInfo
 
 
 # from .StructureViruses import StructCalculator
@@ -204,4 +205,8 @@ class Aligner(object):
   def naive_consensus_majority(self):
     """
     """
-    
+    alignSummary = SummaryInfo(self.refinedAlignment)
+    with open(f"{self.outdir}/{self.prefix}_dumb_consensus.fasta", 'w') as outputStream:
+      outputStream.write(f">{self.prefix}_dumb_consensus\n")
+      outputStream.write(str(alignSummary.gap_consensus(ambiguous="N", threshold=0.51)) + "\n")
+
