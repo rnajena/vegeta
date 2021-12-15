@@ -49,7 +49,7 @@ Options:
 
   -t THRESHOLD, --tbpp THRESHOLD          Basepairing-probability threshold for potential nucleotide interactions. 
                                           if bpp between two nucleotides is smaller than this value, 
-                                          it isn't considered during ILP construction. [Default: 0.7]
+                                          it isn't considered during ILP construction. [Default: 0.4]
   -w WINDOWSIZE, --windowsize WINDOWSIZE  Specifies the window length for the final structure calculation. [Default: 300]
   -s STEPSIZE, --stepsize STEPSIZE        Specifies the step size of the sliding window. [Default: 50]
 
@@ -261,6 +261,9 @@ def derive_structure(prefix):
   struc.scan_consensus(f"{outdir}/{prefix}_dumb_consensus.fasta")
   logger.info("Parsing basepairing probabilities from consensus.")
   struc.calculate_avg_bpp()
+  logger.info("Finding disjoint sub-structures.")
+  print(struc.find_disjoint_regions())
+  print(struc.disjoint_regions)
   exit(0)
   logger.info("Applying RNAalifold on alignment windows.")
   #struc.apply_alifold()

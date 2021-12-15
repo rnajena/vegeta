@@ -17,6 +17,7 @@ import random
 import itertools
 
 import numpy as np
+import pandas as pd
 from scipy.stats import norm
 from scipy.stats.mstats import zscore
 
@@ -45,7 +46,8 @@ class StructCalculator(object):
     self.alignment = self.__read_alignment(path)
     self.alnLength = self.alignment.get_alignment_length()
     self.finalStructure = '.' * self.alnLength
-
+    self.pd_dotplot = pd.DataFrame(0, index=range(self.alnLength), columns=range(self.alnLength), dtype=np.int8)
+    self.disjoint_regions = []
     #self.windows = self.__create_sliding_window()
     self.overlappingStructures = {}
     self.nonOverlap = {}
@@ -119,12 +121,14 @@ class StructCalculator(object):
         bpp = math.pow(float(line[2]), 2)
         if bpp >= self.tbpp:
             self.__update_bpps(start, stop, bpp)
-            self.__update_bpps(stop, start, bpp)
+            #self.pd_dotplot[start][stop] = 1
+            #self.__update_bpps(stop, start, bpp)
 
     for start, values in self.bpps.items():
       for stop, probabilites in values.items():
         self.bpps[start][stop] = np.average(probabilites)
 
+    #print(self.pd_dotplot.sum())
     # for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}_window_*.ps"):
       
     #   idx = int(os.path.basename(file).split('_')[-3])
@@ -158,6 +162,72 @@ class StructCalculator(object):
       self.bpps[x].update({y : [bpp]})
     else:
       self.bpps[x][y].append(bpp)   
+
+  def find_disjoint_regions(self):
+    """
+    """
+    startingTuple = (0, self.alnLength)
+    threshold = self.tbpp
+    while startingTuple:
+      region = self.__finding_my_regions(start=startingTuple[0], stop=startingTuple[1], threshold=threshold)
+      if region:
+        self.disjoint_regions.append(region)
+        startingTuple = (region[1]+1,self.alnLength)
+        threshold = self.tbpp
+      else:
+        if threshold < 1:
+          threshold += 0.05
+        else:
+          startingTuple = startingTuple[0]+1, startingTuple[1]
+          threshold = self.tbpp
+
+  def __finding_my_regions(self, start=0, stop=None, threshold=None):
+    """
+    """
+    if stop is None:
+      stop = self.alnLength
+    if threshold is None:
+      threshold = self.tbpp
+
+    allColumns = sorted([x for x in list(self.bpps) if start <= x <= stop])
+    #allColumns = sorted(list(self.bpps.keys()))    
+    #while allColumns:
+    firstElement = allColumns[0]
+    
+    try:
+      maxInteraction = max([k for k,v in self.bpps[firstElement].items() if v >= threshold])
+      interactionRange = (firstElement, maxInteraction)
+      tmp = (0,0)
+    except ValueError:
+      interactionRange = (start+1,stop)
+      tmp = interactionRange
+      threshold = self.tbpp - 0.05
+      return None
+      #if stop - start > 500:
+        #print(start, stop, threshold, self.bpps[firstElement].items())
+        #return(self.find_disjoint_regions(start=start+1, stop=stop, threshold=self.tbpp))
+      #else:
+        #print(start, stop, threshold, self.bpps[firstElement].items())
+        #return(start, stop)
+    
+    
+    while interactionRange != tmp:
+      tmp = interactionRange
+      for i in range(tmp[0], tmp[1]+1):
+        if i not in self.bpps: continue
+        for x in [k for k,v in self.bpps[i].items() if v >= threshold]:
+          if x > maxInteraction:
+            interactionRange = (firstElement, x)
+            maxInteraction = x
+
+      #allColumns = [x for x in allColumns if x not in range(interactionRange[0],interactionRange[1]+1)]
+
+    if interactionRange[1] - interactionRange[0] > 500:
+        return None
+    else:
+      return(interactionRange)
+
+
 
   def generate_ilp(self):
     """
