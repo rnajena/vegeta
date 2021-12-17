@@ -79,14 +79,67 @@ class StructCalculator(object):
     """
     """
     TRASH = open(os.devnull, 'w')
+    
     for idx, _ in enumerate(self.windows):
+      OUTPUT = open(f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}_alifold.out", 'w')
       file = f"{self.outdir}/tmpSequences/{self.prefix}_window_{idx}.aln"
-      cmd = f"RNAalifold --noLP -p --cfactor 0.6 --nfactor 0.5 -r --id-prefix={self.prefix}_window_{idx} {file}"
-      subprocess.run(cmd.split(), check=True, stderr=TRASH, stdout=TRASH)
-      os.remove(f"{self.prefix}_window_{idx}_0001_ali.out")
+      cmd = f"RNAalifold --noLP -p2 --MEA --cfactor 0.6 --nfactor 0.5 -r --id-prefix={self.prefix}_window_{idx} {file}"
+      subprocess.run(cmd.split(), check=True, stdout=OUTPUT, stderr=TRASH)
       os.remove(f"{self.prefix}_window_{idx}_0001_ss.ps")
+      os.remove(f"{self.prefix}_window_{idx}_0001_ali.out")
       shutil.move(f"{self.prefix}_window_{idx}_0001_dp.ps", f"{self.outdir}/tmpSequences/")
+      OUTPUT.close()
     TRASH.close()
+
+  def extract_structures(self):
+    """
+    """
+    
+    for file in glob.glob(f"{self.outdir}/tmpSequences/{self.prefix}*_alifold.out"):
+      idx = int(os.path.basename(file).split('_')[-2])
+      currentWindow = self.windows[idx]
+      offset = currentWindow[0]
+      with open(file, 'r') as inputStream:
+        currentLine = 0
+        for line in inputStream:
+          if not line or not line.startswith('.') and not line.startswith('('):
+            continue
+          currentLine += 1
+          if currentLine == 1:# or currentLine == 4: # MFE and MEA structure, respecitvely.
+            bracketStructure = line.split()[0]
+            start = 0
+            stack = 0
+            for idx, char in enumerate(bracketStructure):
+              if char == '(':
+                if not stack:
+                  start = idx
+                stack += 1
+              elif char == ')':
+                stack -= 1
+                if not stack:
+                  closedStructure = (start  + offset, idx + offset)
+                  self.overlappingStructures[closedStructure] = bracketStructure[start:idx+1]
+    print(self.get_all_nonoverlapping_structures())
+
+
+  def get_all_nonoverlapping_structures(self, searchList=None, result=[]):
+    """
+    """
+    if not searchList:
+      searchList = sorted(self.overlappingStructures.keys())
+    #searchList = sorted(self.overlappingStructures.keys())
+    # stopping condition #1 ... last element was overlapped and is a singleton
+    if len(searchList) == 1:
+        result.append(searchList[0])
+        return result
+    temp = [searchList[0]]  # to hold intermediate result, starting with first input element
+    for idx, element in enumerate(searchList[1:], 1):
+        if element[0] >= temp[-1][1]+1:
+            temp.append(element)
+        #else:  # found a new starting point
+         #   self.get_all_nonoverlapping_structures(searchList[idx:], result)
+    result.append(tuple(temp))
+    return(result)
 
 
   def calculate_avg_bpp(self):
